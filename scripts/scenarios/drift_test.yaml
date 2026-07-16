@@ -1,0 +1,21 @@
+# Drift validation — same question across two prompt versions.
+#
+# Run with:
+#   python scripts/batch_run.py scripts/scenarios/drift_test.yaml
+#
+# Use this to verify the drift detector actually catches a real prompt change:
+#
+#   1. Run this file as-is (3 v1 runs of the same question).
+#   2. Edit your prompts and start tagging runs as v2 (just change the flag).
+#   3. Run this file with prompt_version: 2 (3 more runs, same question).
+#   4. Open /trends — the "vs baseline" version drift card should fire,
+#      and any agent whose behaviour changed gets a 'drifting' verdict.
+#
+# Paired-mode comparison kicks in because the question text is identical
+# across both versions.
+
+scenarios:
+  - task_type: csv-analysis
+    prompt_version: 1            # change to 2 after you've edited prompts
+    question: "Analyze data/sales.csv and summarize the findings."
+    runs: 3

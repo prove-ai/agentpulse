@@ -1,0 +1,12 @@
+agent_prompt_hashes:
+  DataAnalyst: 31db655d
+  Engineer: 6639c2e1
+  Manager: 39960d64
+  Research: 7c29255e
+  Reviewer: b13f1013
+  Writer: ceef2b93
+description: Initial prompt set — Manager plans once, DataAnalyst owns data, Engineer
+  defers writing to Writer.
+is_baseline: true
+thresholds: {}
+version: 1

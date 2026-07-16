@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "agentpulse": {
+      "type": "stdio",
+      "command": ".venv/bin/python",
+      "args": ["agentpulse_mcp.py"],
+      "env": {}
+    }
+  }
+}

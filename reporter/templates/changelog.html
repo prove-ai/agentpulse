@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}Event Timeline — AgentPulse{% endblock %}
+{% block content %}
+<style>
+  .et-back { font-size:.82rem; color:#3949ab; text-decoration:none; }
+  .et-back:hover { text-decoration:underline; }
+  .et-title { font-size:1.5rem; font-weight:700; color:#1a1a2e; margin:6px 0 2px; }
+  .et-sub { color:#8a90a0; font-size:.88rem; margin-bottom:16px; }
+  .et-filters { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
+  .et-fl { display:flex; align-items:center; gap:7px; border:1px solid #e2e5ee; border-radius:9px;
+           padding:6px 11px; background:#fff; font-size:.84rem; }
+  .et-fl span { color:#8a90a0; } .et-fl select { border:none; outline:none; font-weight:600; color:#1a1a2e; background:transparent; cursor:pointer; }
+  .et-grid { display:flex; gap:18px; align-items:flex-start; }
+  .et-left { width:430px; flex-shrink:0; }
+  .et-right { flex:1; min-width:0; }
+  .panel { background:#fff; border:1px solid #eef0f5; border-radius:12px; }
+  .panel-h { padding:13px 16px; border-bottom:1px solid #f0f1f5; font-weight:700; font-size:.92rem; }
+  .panel-b { padding:14px 16px; }
+
+  /* event list */
+  .et-left .panel { display:flex; flex-direction:column; max-height:calc(100vh - 150px); overflow:hidden; }
+  .ev-scroll { overflow-y:auto; flex:1; min-height:0; }
+  .ev-row { display:flex; align-items:center; gap:11px; padding:11px 14px; border-bottom:1px solid #f4f5f9;
+            text-decoration:none; color:inherit; }
+  .ev-row:last-child { border-bottom:none; }
+  .ev-row:hover { background:#f7f8fc; }
+  .ev-row.active { background:#eef0fb; box-shadow:inset 3px 0 0 #3949ab; }
+  .ev-ico { width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .ev-ico svg { width:17px; height:17px; stroke:currentColor; fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+  .t-config_change{background:#e8eef9;color:#2d4a8a} .t-version{background:#e6f4ea;color:#1e7d4a}
+  .t-release{background:#efe9fb;color:#6a45c8} .t-drift{background:#fdecec;color:#c0392b}
+  .t-impact{background:#fff1e0;color:#a86415} .t-evidence{background:#eef0f5;color:#5a6072}
+  .ev-body { flex:1; min-width:0; }
+  .ev-kind { font-size:.68rem; text-transform:uppercase; letter-spacing:.4px; color:#9aa0b0; }
+  .ev-name { font-weight:600; font-size:.9rem; color:#1a1a2e; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ev-when { font-size:.74rem; color:#9aa0b0; text-align:right; flex-shrink:0; white-space:nowrap; }
+
+  /* detail */
+  .d-head { display:flex; align-items:center; gap:10px; }
+  .d-ico { width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .d-ico svg { width:17px; height:17px; stroke:currentColor; fill:none; stroke-width:1.7; }
+  .d-title { font-weight:700; font-size:1.1rem; }
+  .d-badge { margin-left:auto; font-size:.72rem; font-weight:600; background:#eef0fb; color:#3949ab; border-radius:12px; padding:3px 11px; }
+  .d-meta { display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin:16px 0; }
+  .d-meta .k { font-size:.66rem; text-transform:uppercase; letter-spacing:.4px; color:#9aa0b0; }
+  .d-meta .v { font-size:.86rem; font-weight:600; color:#1a1a2e; margin-top:2px; }
+  .d-meta .v a { color:#3949ab; text-decoration:none; } .d-meta .v a:hover { text-decoration:underline; }
+  .d-meta .croleta { font-size:.72rem; color:#9aa0b0; margin-top:2px; line-height:1.3; }
+  .d-desc { font-size:.86rem; color:#5a6072; background:#f7f8fb; border-radius:8px; padding:10px 12px; }
+  .d-diff { display:grid; grid-template-columns:1fr auto 1fr; gap:10px; align-items:stretch; margin:14px 0; }
+  .d-diff .arrow { align-self:center; color:#adb5bd; }
+  .diff-box { border-radius:9px; padding:10px 12px; font-size:.82rem; line-height:1.45; }
+  .diff-box .lbl { font-size:.64rem; text-transform:uppercase; letter-spacing:.4px; font-weight:700; margin-bottom:5px; }
+  .diff-before { background:#fdecec; color:#7a1f1f; } .diff-before .lbl { color:#c0392b; }
+  .diff-after { background:#e8f6ec; color:#155a32; } .diff-after .lbl { color:#1e7d4a; }
+  .d-fields { display:grid; grid-template-columns:1fr 1fr; gap:8px 18px; margin:14px 0 4px; font-size:.84rem; }
+  .d-fields .row { display:flex; justify-content:space-between; gap:10px; padding:3px 0; }
+  .d-fields .row .fk { color:#8a90a0; } .d-fields .row .fv { font-weight:600; color:#1a1a2e; }
+  .d-sec { font-size:.92rem; font-weight:700; margin:20px 0 12px; }
+  .imp-cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:12px; }
+  .imp-card { border:1px solid #eef0f5; border-radius:10px; padding:11px 13px; }
+  .imp-k { font-size:.74rem; color:#8a90a0; }
+  .imp-v { font-size:1.15rem; font-weight:700; margin-top:2px; }
+  .imp-v.up { color:#c0392b; } .imp-v.down { color:#1e7d4a; }
+  .d-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; }
+  .d-btn { display:inline-flex; align-items:center; gap:7px; border:1px solid #e2e5ee; border-radius:9px;
+           padding:7px 13px; font-size:.82rem; font-weight:600; color:#3a3f55; text-decoration:none; background:#fff; }
+  .d-btn:hover { background:#f3f5fb; border-color:#cdd2e0; color:#1a1a2e; }
+  .d-btn svg { width:15px; height:15px; stroke:currentColor; fill:none; stroke-width:1.7; }
+  .et-empty { color:#8a90a0; padding:40px; text-align:center; }
+</style>
+
+{% macro ev_icon(t) %}
+  {% if t=='config_change' %}<svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h12M4 18h8"/></svg>
+  {% elif t=='version' %}<svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.3 7 12 12 20.7 7"/></svg>
+  {% elif t=='release' %}<svg viewBox="0 0 24 24"><path d="M4.5 16.5 3 21l4.5-1.5M14 4s4 1 6 3 3 6 3 6-3 .5-5 2.5-2.5 5-2.5 5-4-1-6-3-3-6-3-6 3-.5 5-2.5z"/></svg>
+  {% elif t=='drift' %}<svg viewBox="0 0 24 24"><path d="M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/></svg>
+  {% elif t=='impact' %}<svg viewBox="0 0 24 24"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="15 7 21 7 21 13"/></svg>
+  {% else %}<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>{% endif %}
+{% endmacro %}
+
+{% set fqs %}{% if component %}&component={{ component }}{% endif %}{% if version_f %}&version={{ version_f }}{% endif %}{% if rng %}&range={{ rng }}{% endif %}{% if request.args.get('db') %}&db={{ request.args.get('db') }}{% endif %}{% endset %}
+
+<a class="et-back" href="/switch-db/{{ current_db }}?next=drift2">← Back to Drift Investigation</a>
+<div class="et-title">Event Timeline</div>
+<div class="et-sub">Track every config change, version snapshot, and drift-related event across your agent workflows.</div>
+
+<form class="et-filters" method="get">
+  <input type="hidden" name="db" value="{{ request.args.get('db','') }}">
+  <label class="et-fl"><span>Component</span>
+    <select name="component" onchange="this.form.submit()">
+      <option value="">All</option>
+      {% for cval, clabel in components %}<option value="{{ cval }}" {{ 'selected' if cval==component else '' }}>{{ clabel }}</option>{% endfor %}
+    </select></label>
+  <label class="et-fl"><span>Time range</span>
+    <select name="range" onchange="this.form.submit()">
+      <option value="">All time</option>
+      {% for k,label,_ in ranges %}<option value="{{ k }}" {{ 'selected' if k==rng else '' }}>{{ label }}</option>{% endfor %}
+    </select></label>
+  <label class="et-fl"><span>Version</span>
+    <select name="version" onchange="this.form.submit()">
+      <option value="">All</option>
+      {% for n in ver_opts %}<option value="{{ n }}" {{ 'selected' if (version_f and version_f|int==n) else '' }}>v{{ n }}</option>{% endfor %}
+    </select></label>
+</form>
+
+<div class="et-grid">
+  <!-- LEFT: event list -->
+  <div class="et-left">
+    <div class="panel">
+      <div class="panel-h">Timeline <span class="text-muted small">· {{ total }} event{{ 's' if total != 1 else '' }}</span></div>
+      <div class="ev-scroll">
+      {% if events %}
+      {% for e in events %}
+      <a class="ev-row {{ 'active' if selected and e.id==selected.id else '' }}"
+         href="/changelog?event={{ e.id }}{{ fqs }}">
+        <span class="ev-ico t-{{ e.type }}">{{ ev_icon(e.type) }}</span>
+        <span class="ev-body">
+          <span class="ev-kind">{{ e.type_label }}</span>
+          <div class="ev-name">{{ e.title }}</div>
+        </span>
+        <span class="ev-when">{% if e.run_index < 100000 %}Run {{ e.run_index }}<br>{% endif %}{{ e.ts|et('%H:%M') if e.ts else '' }}</span>
+      </a>
+      {% endfor %}
+      {% else %}<div class="et-empty">No events match these filters.<br><a class="et-back" href="/changelog{% if request.args.get('db') %}?db={{ request.args.get('db') }}{% endif %}">Clear filters</a></div>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: selected event detail -->
+  <div class="et-right">
+    {% if selected %}
+    <div class="panel"><div class="panel-b">
+      <div class="d-head">
+        <span class="d-ico t-{{ selected.type }}">{{ ev_icon(selected.type) }}</span>
+        <span class="d-title">{{ selected.title }}</span>
+        <span class="d-badge">{{ selected.type_label }}</span>
+      </div>
+
+      <div class="d-meta">
+        <div><div class="k">Event type</div><div class="v">{{ selected.type_label }}</div></div>
+        <div><div class="k">Affected component</div><div class="v">{{ selected.component_label or '—' }}</div>{% if selected.component_role %}<div class="croleta">{{ selected.component_role }}</div>{% endif %}</div>
+        <div><div class="k">First seen</div><div class="v">{% if selected.run_index < 100000 %}Run {{ selected.run_index }} · {% endif %}{{ selected.ts|et('%Y-%m-%d') if selected.ts else '—' }}</div></div>
+        <div><div class="k">Related drift</div><div class="v">{% if selected.related_drift %}<a href="/drift2?finding={{ selected.related_drift }}{% if request.args.get('db') %}&db={{ request.args.get('db') }}{% endif %}" title="Open this finding in Drift Investigation">{{ selected.component_label }}</a>{% else %}—{% endif %}</div></div>
+      </div>
+
+      {% if selected.before or selected.after %}
+      {% if selected.dim == 'prompt' %}
+      <div class="d-desc">This change happened around the drift window and affects the <b>{{ selected.component_label }}</b>.</div>
+      {% endif %}
+      <div class="d-diff">
+        <div class="diff-box diff-before"><div class="lbl">Before</div>{% if selected.dim == 'prompt' %}“{{ selected.before }}”{% else %}{{ selected.before }}{% endif %}</div>
+        <span class="arrow">→</span>
+        <div class="diff-box diff-after"><div class="lbl">After</div>{% if selected.dim == 'prompt' %}“{{ selected.after }}”{% else %}{{ selected.after }}{% endif %}</div>
+      </div>
+      {% endif %}
+
+      <div class="d-fields">
+        {% if selected.hash_before or selected.hash_after %}<div class="row"><span class="fk">Prompt hash</span><span class="fv">{{ selected.hash_before }} → {{ selected.hash_after }}</span></div>{% endif %}
+        {% if selected.author %}<div class="row"><span class="fk">Author</span><span class="fv">{{ selected.author }}</span></div>{% endif %}
+        <div class="row"><span class="fk">Source</span><span class="fv">{{ selected.source or '—' }}</span></div>
+        {% if selected.changed_fields %}<div class="row"><span class="fk">Changed fields</span><span class="fv">{{ selected.changed_fields }}</span></div>{% endif %}
+        <div class="row"><span class="fk">In version</span><span class="fv">v{{ selected.version }}</span></div>
+      </div>
+
+      {% if selected_impact %}
+      <div class="d-sec">Impact &amp; context <span class="text-muted small">(since this change)</span></div>
+      <div class="imp-cards">
+        {% for m in selected_impact %}
+        <div class="imp-card {{ m.dir }}">
+          <div class="imp-k">{{ m.label }}</div>
+          <div class="imp-v {{ m.dir }}">{{ m.val if m.val else m.pct }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div></div>
+    {% else %}
+    <div class="panel"><div class="et-empty">Select an event to see its details.</div></div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  // Selection is a full page reload (?event=…); keep the active row visible
+  // within the scrollable timeline instead of forcing the user to scroll to it.
+  (function () {
+    const active = document.querySelector('.ev-scroll .ev-row.active');
+    if (active) active.scrollIntoView({ block: 'nearest' });
+  })();
+</script>
+{% endblock %}

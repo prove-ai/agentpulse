@@ -1,0 +1,39 @@
+# Sample DBs in db/ are committed so newcomers see real data on first run.
+# (No secrets — these are just captured runs from demo systems.)
+
+# Python venvs (each user creates their own)
+.venv/
+venv/
+env/
+
+# Python bytecode + caches
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# Secrets
+.env
+.env.local
+.env.*.local
+
+# Local artifacts (per-user, not part of the project)
+.repomap/
+converted_runs.json
+
+# Databases are per-user data — only the bundled demo sample is committed
+db/*.db
+!db/demo.db
+db/*.db-journal
+db/*.db-wal
+db/*.db-shm
+
+# Claude Code local settings (project .mcp.json and .claude/skills ARE committed)
+.claude/settings.local.json
+
+# macOS / editor cruft
+.DS_Store
+.idea/
+.vscode/
+*.swp

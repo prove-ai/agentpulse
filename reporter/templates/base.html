@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}AgentPulse{% endblock %}</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='proveai_logo.png') }}">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f4f6fa; font-family: 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+    .navbar { background: #f9fafc !important; border-bottom: 1px solid #e6e8ef;
+              box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+    .navbar-brand { color: #1a1a2e !important; font-weight: 600; letter-spacing: 0.2px;
+                    font-size: 1.15rem; gap: 9px; }
+    .brand-logo { width: 26px; height: 26px; object-fit: contain; }
+    .topsearch { position: relative; display: flex; align-items: center; width: 380px; max-width: 42vw; }
+    .topsearch .ts-mag { position: absolute; left: 11px; width: 16px; height: 16px;
+                         stroke: #9aa0b0; fill: none; stroke-width: 1.8; pointer-events: none; }
+    .topsearch input { width: 100%; border: 1px solid #e2e5ee; border-radius: 9px;
+                       padding: 7px 42px 7px 34px; font-size: 0.85rem; background: #fff; outline: none; color: #1a1a2e; }
+    .topsearch input:focus { border-color: #3949ab; box-shadow: 0 0 0 3px rgba(57,73,171,0.10); }
+    .topsearch .ts-kbd { position: absolute; right: 9px; font-size: 0.7rem; color: #9aa0b0;
+                         border: 1px solid #e2e5ee; border-radius: 5px; padding: 1px 6px; background: #f7f8fb; }
+    @media (max-width: 640px) { .topsearch { display: none; } }
+    .card { border: none; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+    .card-header { border-radius: 12px 12px 0 0 !important; font-weight: 600; }
+    /* Soft card header — no more black bar */
+    .card-header-soft { background: #ffffff; color: #1a1a2e; border-bottom: 1px solid #eef0f5;
+                        padding: 14px 20px; }
+    .metric-box { background: white; border-radius: 10px; padding: 16px 20px;
+                  box-shadow: 0 1px 6px rgba(0,0,0,0.07); text-align: center; }
+    .metric-box .value { font-size: 1.8rem; font-weight: 700; line-height: 1.1; }
+    .metric-box .label { font-size: 0.75rem; color: #6c757d; text-transform: uppercase;
+                         letter-spacing: 0.5px; margin-top: 4px; }
+    /* Mild status pills — soft mint / soft pink (matches reference image) */
+    .badge-ok     { background: #e6f4ea; color: #1e6b3a; padding: 5px 14px;
+                    border-radius: 20px; font-size: 0.78rem; font-weight: 600;
+                    letter-spacing: 0.2px; }
+    .badge-drift  { background: #fbe7e7; color: #8a1f1f; padding: 5px 14px;
+                    border-radius: 20px; font-size: 0.78rem; font-weight: 600;
+                    letter-spacing: 0.2px; }
+    .badge-warn   { background: #fff4e0; color: #7a4a00; padding: 4px 10px;
+                    border-radius: 20px; font-size: 0.78rem; font-weight: 600; }
+    /* Instant CSS hover-popover (replaces native title= tooltips, which are slow
+       and unstyled). Wrap a trigger + a hidden panel in .more-wrap. */
+    .more-wrap   { position: relative; display: inline-block; cursor: help; }
+    .more-pop    { display: none; position: absolute; z-index: 1200;
+                   bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+                   background: #1a1a2e; color: #f0f0ff; border-radius: 6px;
+                   padding: 8px 12px; font-size: 0.78rem; font-weight: 500;
+                   white-space: nowrap; box-shadow: 0 6px 16px rgba(0,0,0,0.22);
+                   text-align: left; min-width: 140px; }
+    .more-pop div { padding: 1px 0; }
+    .more-pop::after { content: ""; position: absolute; top: 100%; left: 50%;
+                      transform: translateX(-50%); border: 5px solid transparent;
+                      border-top-color: #1a1a2e; }
+    .more-wrap:hover .more-pop { display: block; }
+    /* Custom hover popover (built in JS, appended to <body>, can't be clipped) */
+    .obs-tip-pop { display: none; position: absolute; z-index: 2000;
+                   background: #1a1a2e; color: #f0f0ff; border-radius: 6px;
+                   padding: 8px 12px; font-size: 0.78rem; font-weight: 500;
+                   box-shadow: 0 6px 18px rgba(0,0,0,0.28);
+                   pointer-events: none; min-width: 140px; max-width: 280px;
+                   white-space: normal; }
+    .obs-tip-pop div { padding: 1px 0; }
+    [data-tip] { cursor: help; }
+    .route-arrow  { color: #6c757d; margin: 0 4px; }
+    .route-agent  { display: inline-block; background: #e8eaf6; color: #3949ab;
+                    border-radius: 6px; padding: 2px 10px; font-size: 0.82rem;
+                    font-weight: 600; margin: 2px; }
+    .bar-wrap     { background: #e9ecef; border-radius: 6px; height: 22px;
+                    overflow: hidden; }
+    .bar-fill     { height: 100%; border-radius: 6px; display: flex;
+                    align-items: center; padding-left: 8px;
+                    font-size: 0.72rem; color: white; font-weight: 600; }
+    .verdict-ok   { color: #28a745; font-weight: 600; }
+    .verdict-drift{ color: #dc3545; font-weight: 600; }
+    /* Mild verdict pills — soft tinted background, dark text */
+    .pill { display: inline-block; padding: 3px 12px; border-radius: 14px;
+            font-size: 0.72rem; font-weight: 600;
+            letter-spacing: 0.2px; line-height: 1.4; white-space: nowrap; }
+    .pill-ok        { background: #e6f4ea; color: #1e6b3a; }  /* mint */
+    .pill-warn      { background: #fff4e0; color: #7a4a00; }  /* cream */
+    .pill-drift     { background: #fbe7e7; color: #8a1f1f; }  /* pink (high) */
+    .pill-potential { background: #fdeccf; color: #8a4b00; }  /* orange (medium) */
+    .pill-watch     { background: #faf3cd; color: #6b5e00; }  /* yellow (watch) */
+    table.metrics-table td:first-child { color: #6c757d; font-size: 0.85rem; width: 220px; }
+    table.metrics-table td { padding: 5px 10px; vertical-align: top; }
+    .run-row:hover { background: #f0f4ff; cursor: pointer; }
+    .run-row .row-delete { opacity: 0; transition: opacity 0.15s ease; }
+    .run-row:hover .row-delete { opacity: 1; }
+    .no-runs { text-align: center; padding: 60px; color: #aaa; }
+    /* vis-network rich tooltip */
+    div.vis-tooltip {
+      position: absolute; background: #1a1a2e !important; color: #f0f0ff !important;
+      padding: 10px 14px !important; border-radius: 8px !important;
+      border: 1px solid #3949ab !important; box-shadow: 0 8px 22px rgba(0,0,0,0.3) !important;
+      font-family: 'Segoe UI', sans-serif !important; white-space: normal !important;
+      max-width: 320px; z-index: 1300;
+    }
+
+    /* ---------- Sidebar ---------- */
+    .layout { display: flex; min-height: 100vh; }
+    .side-brand { display: flex; align-items: center; gap: 9px; padding: 4px 13px 16px;
+                  color: #f5f6fa; font-weight: 600; font-size: 1.15rem; letter-spacing: 0.2px;
+                  text-decoration: none; white-space: nowrap; }
+    .side-brand:hover { color: #ffffff; }
+    .side-brand .brand-logo { width: 26px; height: 26px; object-fit: contain; flex-shrink: 0; }
+    /* main-page top row: collapse toggle + global search (replaces the old top navbar) */
+    .main-top { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+    /* Brand at top-left — only when the sidebar (which holds the in-rail brand) is collapsed */
+    .main-top-brand { display: none; align-items: center; gap: 9px; color: #1a1a2e;
+                      font-weight: 600; font-size: 1.12rem; letter-spacing: 0.2px; text-decoration: none; }
+    .main-top-brand:hover { color: #000; }
+    .main-top-brand .brand-logo { width: 26px; height: 26px; object-fit: contain; flex-shrink: 0; }
+    .sidebar.collapsed ~ .main-area .main-top-brand { display: inline-flex; }
+    .sidebar {
+      width: 220px; flex-shrink: 0; background: #16171d;
+      border-right: 1px solid #24262f; padding: 18px 12px;
+      transition: width 0.18s ease, padding 0.18s ease;
+      overflow: hidden;
+    }
+    .sidebar.collapsed { width: 0; padding: 18px 0; border-right: none; }
+    .sidebar.collapsed .side-link, .sidebar.collapsed .side-section,
+    .sidebar.collapsed .proj-picker { display: none; }
+    .side-section {
+      font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.8px;
+      color: #7a8090; margin: 14px 12px 6px;
+    }
+    .side-project {
+      font-size: 1.12rem; font-weight: 700; color: #f5f6fa;
+      margin: 4px 12px 12px; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    .side-div { border-top: 1px solid rgba(255,255,255,.08); margin: 10px 12px; }
+    .side-link {
+      display: flex; align-items: center; gap: 9px;
+      padding: 7px 13px; border-radius: 8px; color: #b8bcc8;
+      text-decoration: none; font-size: 0.82rem; font-weight: 500;
+      margin-bottom: 8px; white-space: nowrap;
+    }
+    .side-link:hover { background: rgba(255,255,255,.06); color: #ffffff; }
+    .side-link.active { background: rgba(255,255,255,.11); color: #ffffff; }
+    .side-link .ico { width: 15px; text-align: center; opacity: 0.7; }
+    .side-link .ico-img { width: 28px; height: 28px; object-fit: contain;
+                          opacity: 0.9; flex-shrink: 0; }
+    .side-link.active .ico-img { opacity: 1; }
+    /* Inline line icons (W&B-style) */
+    .side-link .ico-svg { display: flex; flex-shrink: 0; opacity: 0.75; }
+    .side-link .ico-svg svg { width: 15px; height: 15px; stroke: currentColor; fill: none;
+                              stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .side-link.active .ico-svg { opacity: 1; color: #8ea2ff; }
+    .proj-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* Project picker — choose once, then the tabs below are all for that project */
+    .proj-picker { margin: 0 4px 6px; }
+    .proj-picker summary { list-style: none; display: flex; align-items: center; gap: 10px;
+      padding: 8px 14px; border-radius: 8px; cursor: pointer; color: #f5f6fa;
+      font-weight: 600; font-size: 0.92rem; border: 1px solid rgba(255,255,255,.13); background: rgba(255,255,255,.05); }
+    .proj-picker summary::-webkit-details-marker { display: none; }
+    .proj-picker summary:hover { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.22); }
+    .proj-picker .proj-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .proj-picker .proj-caret { font-size: 0.7rem; opacity: 0.5; transition: transform .15s; }
+    .proj-picker[open] .proj-caret { transform: rotate(180deg); }
+    .proj-menu { margin-top: 4px; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; overflow: hidden; }
+    .proj-item { display: block; padding: 7px 14px; color: #b8bcc8; text-decoration: none;
+      font-size: 0.86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .proj-item:hover { background: rgba(255,255,255,.06); color: #ffffff; }
+    .proj-item.active { background: rgba(255,255,255,.11); color: #ffffff; font-weight: 600; }
+    .main-area { flex: 1; padding: 24px 28px 40px; min-width: 0; }
+    .sidebar-toggle {
+      background: none; border: none; color: #5a6175; font-size: 1.2rem;
+      padding: 4px 10px; margin-right: 8px; cursor: pointer;
+    }
+    .sidebar-toggle:hover { color: #1a1a2e; }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <a href="/home" class="side-brand">
+      <img src="{{ url_for('static', filename='agentpulse.png') }}" alt="" class="brand-logo">
+      <span>AgentPulse</span>
+    </a>
+    {# keep the same tab when switching projects #}
+    {% set view = 'index' %}
+    {% if request.path == '/trends' %}{% set view = 'trends' %}
+    {% elif request.path == '/drift2' %}{% set view = 'drift2' %}{% endif %}
+    {% set in_project = request.path != '/home' %}
+
+    <a href="/home" class="side-link {% if not in_project %}active{% endif %}" title="{{ 'All projects' if in_project else 'Home' }}">
+      <span class="ico-svg"><svg viewBox="0 0 24 24"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/></svg></span>
+      {{ 'All projects' if in_project else 'Home' }}
+    </a>
+
+    {% if in_project %}
+    <div class="side-div"></div>
+    <div class="side-project" title="{{ current_db }}">{{ current_db }}</div>
+    <a href="/switch-db/{{ current_db }}?next=overview" title="Overview"
+       class="side-link {% if request.path == '/overview' %}active{% endif %}">
+      <span class="ico-svg"><svg viewBox="0 0 24 24"><path d="M4 18a8 8 0 1 1 16 0"/><line x1="12" y1="18" x2="15.5" y2="11.5"/><circle cx="12" cy="18" r="1.1"/></svg></span>
+      Overview
+    </a>
+    <a href="/switch-db/{{ current_db }}?next=index" title="Run History"
+       class="side-link {% if request.path == '/' %}active{% endif %}">
+      <span class="ico-svg"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="9" x2="9" y2="20"/></svg></span>
+      Run History
+    </a>
+    <a href="/switch-db/{{ current_db }}?next=drift2" title="Drift Investigation"
+       class="side-link {% if request.path == '/drift2' %}active{% endif %}">
+      <span class="ico-svg"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg></span>
+      Drift Investigation
+    </a>
+    <a href="/switch-db/{{ current_db }}?next=explore" title="Metrics Explorer"
+       class="side-link {% if request.path == '/explore' %}active{% endif %}">
+      <span class="ico-svg"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
+      Metrics Explorer
+    </a>
+    <a href="/switch-db/{{ current_db }}?next=changelog" title="Event Timeline"
+       class="side-link {% if request.path == '/changelog' %}active{% endif %}">
+      <span class="ico-svg"><svg viewBox="0 0 24 24"><line x1="12" y1="3" x2="12" y2="21"/><circle cx="12" cy="7" r="2.4"/><circle cx="12" cy="17" r="2.4"/></svg></span>
+      Event Timeline
+    </a>
+    {% endif %}
+  </aside>
+
+  <main class="main-area">
+    <div class="main-top">
+      <button class="sidebar-toggle" id="sidebarToggle" title="Toggle sidebar">☰</button>
+      <a href="/home" class="main-top-brand" title="AgentPulse">
+        <img src="{{ url_for('static', filename='agentpulse.png') }}" alt="" class="brand-logo">
+        <span>AgentPulse</span>
+      </a>
+      {% if request.path == '/home' %}
+      <div class="topsearch">
+        <svg class="ts-mag" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+        <input id="globalSearch" type="text" autocomplete="off" placeholder="Search projects…">
+        <span class="ts-kbd">⌘K</span>
+      </div>
+      {% endif %}
+    </div>
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+<script>
+  // Global search — filters project cards (Home) by name; ⌘K / Ctrl-K focuses it.
+  const gsearch = document.getElementById('globalSearch');
+  if (gsearch) {
+    gsearch.addEventListener('input', () => {
+      const q = gsearch.value.trim().toLowerCase();
+      document.querySelectorAll('.pcard, .proj-card, .side-link .proj-name').forEach(el => {
+        const card = el.closest('.pcard, .proj-card, .side-link') || el;
+        const name = (card.textContent || '').toLowerCase();
+        card.style.display = (!q || name.includes(q)) ? '' : 'none';
+      });
+    });
+    document.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); gsearch.focus(); }
+      if (e.key === 'Escape' && document.activeElement === gsearch) { gsearch.value = ''; gsearch.dispatchEvent(new Event('input')); gsearch.blur(); }
+    });
+  }
+
+  // Sidebar collapse — persists across pages
+  const sidebar = document.getElementById('sidebar');
+  const toggle  = document.getElementById('sidebarToggle');
+  if (localStorage.getItem('obs.sidebar') === 'collapsed') sidebar.classList.add('collapsed');
+  toggle.addEventListener('click', () => {
+    sidebar.classList.toggle('collapsed');
+    localStorage.setItem('obs.sidebar',
+      sidebar.classList.contains('collapsed') ? 'collapsed' : 'open');
+  });
+
+  // ---- Global hover/click tooltip --------------------------------------
+  // Any element with [data-tip] shows its text on hover (transient). Clicking
+  // PINS it open until the user clicks elsewhere (or clicks the same trigger
+  // again). Appended to <body> so container overflow can never clip it.
+  (function () {
+    const pop = document.createElement('div');
+    pop.className = 'obs-tip-pop';
+    document.body.appendChild(pop);
+    let pinnedEl = null;
+
+    function render(el) {
+      // data-tip uses " | " to separate lines (rendered vertically).
+      const parts = (el.getAttribute('data-tip') || '').split('|').map(s => s.trim()).filter(Boolean);
+      if (!parts.length) return false;
+      pop.innerHTML = parts.map(s => '<div>' + s.replace(/</g, '&lt;') + '</div>').join('');
+      return true;
+    }
+    function place(el) {
+      const r = el.getBoundingClientRect();
+      pop.style.display = 'block';
+      let left = r.left + window.scrollX;
+      const top = r.bottom + window.scrollY + 6;
+      // keep within viewport width
+      const maxLeft = window.scrollX + document.documentElement.clientWidth - pop.offsetWidth - 8;
+      if (left > maxLeft) left = Math.max(window.scrollX + 8, maxLeft);
+      pop.style.left = left + 'px';
+      pop.style.top = top + 'px';
+    }
+    function show(el) { if (render(el)) place(el); }
+    function hide() { pop.style.display = 'none'; }
+
+    document.addEventListener('mouseover', (e) => {
+      if (pinnedEl) return;
+      const el = e.target.closest('[data-tip]');
+      if (el) show(el);
+    });
+    document.addEventListener('mouseout', (e) => {
+      if (pinnedEl) return;
+      const el = e.target.closest('[data-tip]');
+      if (el) hide();
+    });
+    document.addEventListener('click', (e) => {
+      const el = e.target.closest('[data-tip]');
+      if (el) {
+        e.stopPropagation();
+        if (pinnedEl === el) { pinnedEl = null; hide(); }   // click same → unpin
+        else { pinnedEl = el; show(el); }                   // pin to this one
+      } else {
+        pinnedEl = null; hide();                            // click elsewhere → unpin
+      }
+    });
+    window.addEventListener('scroll', () => { if (pinnedEl) place(pinnedEl); }, true);
+  })();
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

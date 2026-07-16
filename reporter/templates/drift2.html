@@ -1,0 +1,508 @@
+{% extends "base.html" %}
+{% block title %}Drift Investigation — AgentPulse{% endblock %}
+{% block content %}
+<style>
+  .di-sub { color:#8a90a0; font-size:.85rem; }
+  .d2-head { font-size:1.5rem; font-weight:700; color:#1a1a2e; }
+  .d2-subtitle { color:#8a90a0; font-size:.9rem; margin-bottom:14px; }
+  /* Filter bar (copied from v1) */
+  .di-bar { background:#fff; border:1px solid #eceef3; border-radius:10px; padding:10px 14px;
+            display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  .di-pill { position:relative; display:inline-block; width:250px; box-sizing:border-box; }
+  .di-pill > summary, .di-pill.static { display:flex; box-sizing:border-box; align-items:center; gap:9px;
+      list-style:none; border:1px solid #e2e5ee; border-radius:9px; padding:5px 12px; background:#fff; cursor:pointer; }
+  .di-pill > summary { width:100%; } .di-pill > summary::-webkit-details-marker { display:none; }
+  .ts-ico { width:19px; height:19px; object-fit:contain; opacity:.8; flex-shrink:0; }
+  .ts-range { font-size:.84rem; font-weight:600; color:#1a1a2e; } .ts-tz { font-size:.66rem; color:#9aa0b0; }
+  .di-pop { position:absolute; top:115%; left:0; z-index:20; background:#fff; border:1px solid #e2e5ee;
+      border-radius:10px; padding:12px; box-shadow:0 10px 28px rgba(20,20,40,.12); }
+  .di-pop.ts-pop { display:flex; flex-direction:column; gap:0; padding:8px; width:264px; text-align:left; }
+  .di-pop.ver-pop { display:flex; flex-direction:column; gap:10px; padding:12px; width:auto; min-width:240px; text-align:left; }
+  .ver-row { display:flex; flex-direction:column; gap:5px; }
+  .ver-row > span { font-size:.66rem; text-transform:uppercase; letter-spacing:.5px; color:#99a1b3; }
+  .ver-checks { display:flex; flex-direction:row; flex-wrap:wrap; gap:8px 16px; }
+  .ver-check { display:flex; align-items:center; gap:7px; font-size:.85rem; font-weight:600; color:#1a1a2e; cursor:pointer; margin:0; white-space:nowrap; }
+  .ver-select { border:1px solid #e2e5ee; border-radius:7px; padding:5px 9px; font-size:.85rem; font-weight:600; color:#1a1a2e; background:#fff; cursor:pointer; }
+  .ver-actions { display:flex; align-items:center; gap:14px; }
+  .ver-all { font-size:.78rem; font-weight:600; color:#3949ab; text-decoration:none; }
+  .ver-all:hover { text-decoration:underline; }
+  .ts-search { display:flex; align-items:center; gap:8px; border:1px solid #e2e5ee; border-radius:8px; padding:6px 10px; margin-bottom:6px; }
+  .ts-search input { border:none; outline:none; flex:1; font-size:.85rem; background:transparent; min-width:0; }
+  .ts-opt { display:block; text-align:left; padding:8px 10px; border-radius:7px; font-size:.85rem; color:#1a1a2e; text-decoration:none; }
+  .ts-opt:hover { background:#f3f5fb; } .ts-opt.active { background:#eef0f6; font-weight:600; }
+  .ts-cal-toggle { display:flex; align-items:center; gap:8px; padding:9px 10px; border-top:1px solid #f0f1f5; margin-top:6px; cursor:pointer; font-size:.85rem; color:#3a3f55; }
+  .ts-cal { display:none; flex-direction:column; gap:8px; padding:8px 6px 4px; } .ts-cal.show { display:flex; }
+  .ts-cal label, .ts-cal input, .ts-cal .btn { width:100%; box-sizing:border-box; }
+  .di-pill-label { display:block; font-size:.6rem; text-transform:uppercase; letter-spacing:.5px; color:#9aa0b0; }
+  .di-pill.ts > summary { flex-direction:row; align-items:center; gap:10px; padding:5px 12px; }
+  .ts-col { display:flex; flex-direction:column; gap:0; flex:1; min-width:0; }
+  .ts-caret { font-size:.7rem; color:#9aa0b0; margin-left:auto; flex-shrink:0; }
+  .di-pill.static { flex-direction:column; align-items:flex-start; gap:0; padding:4px 14px; min-width:120px; }
+  .di-pill.static:hover { border-color:#cdd2e0; }
+  .di-pill-valwrap { position:relative; display:inline-flex; align-items:center; width:100%; }
+  .di-pill-select { appearance:none; -webkit-appearance:none; border:none; background:transparent; font-size:.86rem;
+      font-weight:600; color:#1a1a2e; padding:0 18px 0 0; margin:0; width:100%; outline:none; cursor:pointer; }
+  .di-pill-caret { position:absolute; right:0; top:50%; transform:translateY(-50%); pointer-events:none; width:0; height:0;
+      border-left:4px solid transparent; border-right:4px solid transparent; border-top:5px solid #aeb4c2; }
+  .chart-legend { display:flex; flex-wrap:wrap; gap:6px 16px; font-size:.74rem; color:#6c757d; margin-bottom:10px; }
+  .chart-legend .lg { display:inline-flex; align-items:center; gap:6px; } .chart-legend i { display:inline-block; font-style:normal; }
+  .lg-line { width:17px; height:0; border-top:2.5px solid; border-radius:2px; }
+  .lg-band { width:17px; height:10px; background:rgba(66,99,235,.14); border-radius:2px; }
+  .lg-dash { width:17px; height:0; border-top:2px dashed #b0b6c3; }
+  .qmark { display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px;
+           border-radius:50%; background:#e2e5ee; color:#5a6072; font-size:9px; font-weight:700;
+           font-style:normal; cursor:help; vertical-align:middle; margin-left:3px; }
+  .qmark:hover { background:#cdd2e0; }
+
+  .panel { background:#fff; border:1px solid #eceef3; border-radius:12px; }
+  .panel-h { padding:13px 16px; border-bottom:1px solid #f0f1f5; font-weight:700; font-size:.95rem; }
+  .panel-b { padding:14px 16px; }
+  /* left: investigations */
+  .inv { display:block; border:1px solid #eceef3; border-radius:10px; padding:13px 15px; margin-bottom:11px;
+         text-decoration:none; color:inherit; background:#fafbfd; transition:.1s; }
+  .inv:hover { background:#f3f5fb; } .inv.active { background:#fff; box-shadow:0 1px 6px rgba(57,73,171,.12); }
+  .inv-name { font-weight:700; font-size:1rem; color:#1a1a2e; }
+  .inv-sub { font-size:.82rem; color:#6c757d; margin-top:5px; line-height:1.4; }
+  .inv-metrics { display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; }
+  .inv-m { font-size:.72rem; color:#3a3f55; background:#eef0f6; border-radius:6px; padding:2px 8px;
+           font-variant-numeric:tabular-nums; }
+  .inv-arr { font-weight:700; margin-left:3px; } .inv-arr.up { color:#b42318; } .inv-arr.dn { color:#2f6fb4; }
+  .inv-badges { display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; }
+  .inv-badge { font-size:.7rem; font-weight:700; padding:2px 9px; border-radius:9px; }
+  .inv-badge.conf { background:#e8edfd; color:#2f4bd6; }     /* confidence — always blue */
+  .inv-badge.sev.s-high { background:#fdecec; color:#b42318; }
+  .inv-badge.sev.s-drift { background:#fcefe0; color:#9a5b12; }
+  .inv-badge.sev.s-candidate { background:#eef0f6; color:#5a6072; }
+  .inv-badge.sev.s-watch { background:#f3f4f7; color:#7a8090; }
+  .d2-findings-h { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .d2-sort { font-size:.74rem; font-weight:600; color:#3a3f55; text-decoration:none; white-space:nowrap;
+             border:1px solid #e2e5ee; border-radius:6px; padding:3px 10px; background:#fff; }
+  .d2-sort:hover { background:#f3f5fb; color:#1a1a2e; }
+  .d2-arr { color:#3949ab; font-weight:700; }
+  .inv-more { margin-top:4px; }
+  .inv-more > summary { list-style:none; cursor:pointer; font-size:.8rem; font-weight:600; color:#5a6072;
+      padding:8px 10px; border:1px dashed #d6dae4; border-radius:8px; text-align:center; }
+  .inv-more > summary::-webkit-details-marker { display:none; }
+  .inv-more > summary:hover { background:#f5f7fc; color:#3949ab; }
+  .inv-more > summary::before { content:"▸ "; } .inv-more[open] > summary::before { content:"▾ "; }
+  .inv-more[open] > summary { margin-bottom:10px; }
+  /* middle */
+  .d2-fhead { display:flex; align-items:flex-start; gap:12px; margin-bottom:4px; }
+  .d2-head-main { flex:1; min-width:0; }
+  .d2-name { font-size:1.4rem; font-weight:700; color:#1a1a2e; }
+  .d2-sub { font-size:.82rem; color:#6c757d; margin-top:3px; }
+  .d2-head-badges { display:flex; flex-wrap:wrap; gap:6px; flex-shrink:0; }
+  .d2-head-badges .inv-badge { font-size:.74rem; padding:4px 11px; }
+  .d2-sec { font-size:.66rem; text-transform:uppercase; letter-spacing:.5px; color:#46506a; font-weight:700; margin:14px 0 5px; }
+  .d2-list { margin:0; padding-left:18px; font-size:.85rem; color:#3a3f55; } .d2-list li { margin:2px 0; }
+  .d2-why { font-size:.88rem; color:#5a6072; line-height:1.55; }
+  .d2-route-note { font-size:.86rem; color:#5a6072; margin:2px 0 4px; }
+  .d2-route-cap { font-size:.78rem; color:#7a8090; margin:4px 0 12px; }
+  .pgraph { position:relative; height:170px; width:100%; border:1px solid #eef0f6; border-radius:9px; background:#fbfcff; }
+  .pgraph-reset { position:absolute; top:6px; right:6px; z-index:5; background:#fff; border:1px solid #d6d9e2;
+                  border-radius:6px; padding:2px 8px; font-size:.72rem; color:#3a3f55; cursor:pointer;
+                  box-shadow:0 1px 3px rgba(0,0,0,.08); } .pgraph-reset:hover { background:#f0f4ff; }
+  .pg-legend { font-size:.68rem; font-weight:600; color:#9aa0b0; text-transform:none; letter-spacing:0; margin-left:6px; }
+  .pg-legend i { display:inline-block; width:11px; height:11px; border-radius:3px; vertical-align:-1px; margin:0 2px 0 6px; }
+  .pg-legend .pg-add { background:#d4edda; border:1.5px solid #28a745; }
+  .pg-legend .pg-rem { background:#f8d7da; border:1.5px solid #dc3545; }
+  .d2-ai-out { margin-top:11px; font-size:.85rem; } .d2-ai-out.muted { color:#8a90a0; }
+  .d2-ai-tag { font-size:.7rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+               color:#4263eb; margin-bottom:4px; }
+  .d2-chart { border:1px solid #eef0f5; border-radius:10px; padding:10px 12px; margin-bottom:10px; }
+  .d2-chart .ttl { font-size:.84rem; font-weight:600; color:#1a1a2e; margin-bottom:4px; }
+  .d2-empty { color:#8a90a0; padding:40px; text-align:center; }
+  /* right timeline */
+  .tl2-ev { padding:0 0 14px 16px; position:relative; border-left:2px solid #eef0f5; }
+  .tl2-ev::before { content:""; position:absolute; left:-5px; top:3px; width:8px; height:8px; border-radius:50%; background:#c5cbd8; }
+  .tl2-ev.near::before { background:#3949ab; }
+  .tl2-when { font-size:.72rem; color:#9aa0b0; }
+  .tl2-title { font-size:.86rem; font-weight:600; color:#1a1a2e; margin:1px 0; }
+  .tl2-diff { font-size:.78rem; color:#6c757d; font-variant-numeric:tabular-nums; }
+  .tl2-marker { font-size:.66rem; font-weight:700; color:#c0392b; letter-spacing:.5px; margin:4px 0 10px; }
+  .tl2-all { display:inline-block; margin-top:6px; font-size:.8rem; font-weight:600; color:#4263eb; text-decoration:none; }
+  .tl2-all:hover { text-decoration:underline; }
+  /* event rows (related changes + event timeline) — icon · text · run badge */
+  .ev-row { display:flex; align-items:flex-start; gap:11px; padding:11px 4px; text-decoration:none;
+            border-radius:9px; border:1px solid transparent; }
+  .ev-row + .ev-row { border-top:1px solid #f0f1f5; }
+  .ev-row:hover { background:#f6f8fd; }
+  .ev-body { flex:1; min-width:0; }
+  .ev-title { font-size:.86rem; font-weight:600; color:#1a1a2e; line-height:1.3; }
+  .ev-sub { font-size:.78rem; color:#7a8090; margin-top:2px; word-break:break-word; }
+  .ev-meta { flex-shrink:0; text-align:right; }
+  .ev-badge { font-size:.7rem; font-weight:700; color:#3a4cc0; background:#eef0fb; border-radius:7px; padding:2px 9px; white-space:nowrap; }
+  /* event timeline — same format as Drift Investigation v1 */
+  .tl { position:relative; padding-left:22px; }
+  .tl::before { content:''; position:absolute; left:7px; top:4px; bottom:4px; width:2px; background:#eceef3; }
+  .tl-ev { position:relative; padding:0 0 16px 0; display:block; text-decoration:none; color:inherit; }
+  a.tl-ev:hover { background:#f6f7fb; }
+  .tl-go { opacity:0; color:#3949ab; font-weight:700; transition:opacity .1s; }
+  a.tl-ev:hover .tl-go { opacity:1; }
+  .tl-ev::before { content:''; position:absolute; left:-18px; top:3px; width:10px; height:10px;
+                   border-radius:50%; background:#adb5bd; border:2px solid #fff; }
+  .tl-ev.config::before { background:#7048e8; } .tl-ev.version::before { background:#212529; }
+  .tl-when { font-size:.78rem; color:#9aa0b0; }
+  .tl-title { font-size:.92rem; font-weight:600; color:#1a1a2e; }
+  .tl-detail { font-size:.84rem; color:#6c757d; font-variant-numeric:tabular-nums; }
+  .tl-divider { display:flex; align-items:center; gap:8px; margin:7px 0 9px -8px;
+                font-size:.62rem; font-weight:700; text-transform:uppercase; letter-spacing:.5px;
+                color:#fa5252; white-space:nowrap; }
+  .tl-divider::before, .tl-divider::after { content:""; flex:1; height:1px;
+                background:repeating-linear-gradient(90deg,#fa5252 0 4px,transparent 4px 8px); }
+  .nc-list { margin:0; padding-left:20px; } .nc-list li { font-size:.85rem; color:#3a3f55; margin-bottom:8px; line-height:1.45; }
+  .nc-list li::marker { font-weight:700; color:#3a4cc0; }
+  .ai-cta { display:inline-flex; align-items:center; gap:7px; margin-top:4px; font-size:.82rem; font-weight:600;
+            color:#3a4cc0; background:#fff; border:1px solid #c9d0f4; border-radius:9px; padding:8px 14px; cursor:pointer; }
+  .ai-cta:hover { background:#f3f5ff; } .ai-cta:disabled { opacity:.6; cursor:default; }
+  .ai-cta svg { width:15px; height:15px; }
+</style>
+
+{% set qs %}{% if task_type %}&task_type={{ task_type }}{% endif %}&compared=1&base={{ from_v }}{% for n in to_vs %}&to={{ n }}{% endfor %}{% if sort and sort != 'sev_desc' %}&sort={{ sort }}{% endif %}{% if request.args.get('db') %}&db={{ request.args.get('db') }}{% endif %}{% endset %}
+
+<div class="d2-head">Drift Investigation</div>
+<div class="d2-subtitle">Grouped workflow, findings, supporting signals, and related system changes.</div>
+
+<!-- Filter bar (same as v1) -->
+<form class="di-bar mb-3" method="get">
+  <input type="hidden" name="db" value="{{ request.args.get('db','') }}">
+  <input type="hidden" name="range" value="{{ rp }}">
+  <details class="di-pill ts">
+    <summary>
+      <svg class="ts-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3.5" y="5" width="17" height="16" rx="2"/>
+        <path d="M8 3v4M16 3v4M3.5 10.5h17"/>
+      </svg>
+      <span class="ts-col"><span class="di-pill-label">Time Range</span>
+        <span class="ts-range">{{ range_display }} <span class="ts-tz">{{ tz_label }}</span></span></span>
+      <span class="ts-caret">▾</span>
+    </summary>
+    <div class="di-pop ts-pop">
+      <div class="ts-search"><input placeholder='Search or type "25m"' onkeydown="tsSearch(event)"></div>
+      {% for key,label,_ in ranges %}
+      <a class="ts-opt {{ 'active' if key==active_range else '' }}" href="/drift2?range={{ key }}{{ qs }}">{{ label }}</a>
+      {% endfor %}
+      <div class="ts-cal-toggle" onclick="document.getElementById('tsCal').classList.toggle('show')">Pick from a calendar</div>
+      <div class="ts-cal {{ 'show' if start and end else '' }}" id="tsCal">
+        <label>From<input type="date" name="start" value="{{ start or '' }}"></label>
+        <label>To<input type="date" name="end" value="{{ end or '' }}"></label>
+        <button class="btn btn-sm btn-primary" type="submit">Apply</button>
+      </div>
+    </div>
+  </details>
+  <label class="di-pill static">
+    <span class="di-pill-label">Task Type</span>
+    <span class="di-pill-valwrap">
+      <select name="task_type" class="di-pill-select" onchange="this.form.submit()">
+        <option value="">All</option>
+        {% for t in task_types %}<option value="{{ t }}" {{ 'selected' if t==task_type else '' }}>{{ t }}</option>{% endfor %}
+      </select><span class="di-pill-caret"></span>
+    </span>
+  </label>
+  <details class="di-pill ver">
+    <summary>
+      <span class="ts-col"><span class="di-pill-label">Version Comparison</span>
+        <span class="ts-range">{% if compare_on %}v{{ from_v }} vs {% for n in to_vs %}v{{ n }}{{ ', ' if not loop.last else '' }}{% endfor %}{% else %}v{{ from_v }}{% endif %}</span></span>
+      <span class="ts-caret">▾</span>
+    </summary>
+    <div class="di-pop ver-pop" onclick="event.stopPropagation()">
+      <input type="hidden" name="compared" value="1">
+      <div class="ver-row"><span>Compare from</span>
+        <select name="base" class="ver-select">
+          {% for n in ver_options %}<option value="{{ n }}" {{ 'selected' if n==from_v else '' }}>v{{ n }}{% if n==baseline_version %} (baseline){% endif %}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="ver-row"><span>Compare to</span><div class="ver-checks">
+        {% for n in ver_options %}{% if n != from_v %}<label class="ver-check"><input type="checkbox" name="to" value="{{ n }}" {{ 'checked' if n in to_vs else '' }}> v{{ n }}</label>{% endif %}{% endfor %}
+      </div></div>
+      <div class="ver-actions">
+        <button class="btn btn-sm btn-primary" type="submit">Apply</button>
+        <a class="ver-all" href="/drift2?range={{ rp }}&compared=1&base={{ from_v }}{% for n in ver_options %}{% if n != from_v %}&to={{ n }}{% endif %}{% endfor %}{% if start %}&start={{ start }}&end={{ end }}{% endif %}{% if task_type %}&task_type={{ task_type }}{% endif %}{% if request.args.get('db') %}&db={{ request.args.get('db') }}{% endif %}">Compare all</a>
+      </div>
+    </div>
+  </details>
+  <span class="ms-auto di-sub">{{ run_count }} runs</span>
+</form>
+
+<div class="row g-3">
+  <!-- LEFT: drift findings -->
+  <div class="col-lg-3">
+    <div class="panel">
+      <div class="panel-h d2-findings-h">
+        <span>Findings <span class="text-muted small">· {{ investigations|length }}</span></span>
+        <a class="d2-sort" title="Toggle sort direction"
+           href="/drift2?range={{ rp }}&sort={{ 'sev_asc' if sort=='sev_desc' else 'sev_desc' }}{% if start %}&start={{ start }}&end={{ end }}{% endif %}{% if task_type %}&task_type={{ task_type }}{% endif %}&compared=1&base={{ from_v }}{% for n in to_vs %}&to={{ n }}{% endfor %}{% if request.args.get('db') %}&db={{ request.args.get('db') }}{% endif %}{% if sel %}&sel={{ sel.id }}{% endif %}">
+          Sort: Severity <span class="d2-arr">{{ '↓' if sort=='sev_desc' else '↑' }}</span>
+        </a>
+      </div>
+      <div class="panel-b">
+        {% set primary = investigations|selectattr('severity','in',['high','drift'])|list %}
+        {% set secondary = investigations|rejectattr('severity','in',['high','drift'])|list %}
+        {% macro inv_card(x) %}
+        <a class="inv {{ 'active' if sel and x.id==sel.id else '' }}" href="/drift2?sel={{ x.id }}&range={{ rp }}{% if start %}&start={{ start }}&end={{ end }}{% endif %}{{ qs }}">
+          <div class="inv-name">{{ x.title }}</div>
+          <div class="inv-sub">{{ x.kind_label }} · since run {{ x.drift_start }}</div>
+          {% if x.metrics %}<div class="inv-metrics">{% for m in x.metrics %}<span class="inv-m">{{ m.name }}{% if m.dir=='up' %}<span class="inv-arr up">↑</span>{% elif m.dir=='down' %}<span class="inv-arr dn">↓</span>{% endif %}</span>{% endfor %}</div>{% endif %}
+          <div class="inv-badges">
+            <span class="inv-badge sev s-{{ x.severity }}">Severity: {{ x.severity|sevlabel }}</span>
+            {% if x.confidence %}<span class="inv-badge conf">Confidence: {{ x.confidence|capitalize }}</span>{% endif %}
+          </div>
+        </a>
+        {% endmacro %}
+        {% for x in primary %}{{ inv_card(x) }}{% endfor %}
+        {% if not primary and not secondary %}<div class="d2-empty">No drift detected in this window.</div>{% endif %}
+        {% if not primary and secondary %}<div class="text-muted small mb-2">No high-confidence drift — only lower-confidence signals below.</div>{% endif %}
+        {% if secondary %}
+        <details class="inv-more" {{ 'open' if sel and sel.severity in ['candidate','watch'] else '' }}>
+          <summary>{{ secondary|length }} lower-confidence</summary>
+          {% for x in secondary %}{{ inv_card(x) }}{% endfor %}
+        </details>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- MIDDLE: detail + banded charts -->
+  <div class="col-lg-5">
+    {% if sel %}
+    <div class="panel mb-3"><div class="panel-b">
+      <div class="d2-fhead">
+        <div class="d2-head-main">
+          <div class="d2-name">{{ sel.title }}</div>
+          <div class="d2-sub">{{ sel.subtitle }}</div>
+        </div>
+        <div class="d2-head-badges">
+          <span class="inv-badge sev s-{{ sel.severity }}">Severity: {{ sel.severity|sevlabel }}</span>
+          {% if sel.confidence %}<span class="inv-badge conf">Confidence: {{ sel.confidence|capitalize }}</span>{% endif %}
+        </div>
+      </div>
+      {% if sel.kind=='chain' %}
+      <div class="d2-sec">What changed</div>
+      <ul class="d2-list">{% for w in sel.card.what_changed %}<li>{{ w }}</li>{% endfor %}</ul>
+      <div class="d2-sec">Why it matters</div><div class="d2-why">{{ sel.card.why }}</div>
+      {% else %}
+      {% if sel.route_change %}
+      <div class="d2-route-note">From run {{ sel.route_change.window_start }} on (where the drift starts), {{ sel.route_change.off_rate_pct }}% of runs took a different route than usual.</div>
+      <div class="d2-sec">Common route</div>
+      <div class="d2-route-cap">The route most runs normally follow.</div>
+      <div id="pgPathCanon" class="pgraph"></div>
+      <div class="d2-sec">New route{{ 's' if route_variants|length > 1 else '' }}
+        <span class="pg-legend"><i class="pg-add"></i> added <i class="pg-rem"></i> removed</span></div>
+      {% for v in route_variants %}
+      <div id="{{ v.gid }}" class="pgraph"></div>
+      <div class="d2-route-cap">{{ v.pct }}% of runs since run {{ sel.route_change.window_start }}{% if v.first_run is not none %} · first appeared at run {{ v.first_run }}{% endif %}</div>
+      {% endfor %}
+      {% endif %}
+      {% if sel.what_changed and not sel.route_change %}
+      <div class="d2-sec">What changed</div>
+      <ul class="d2-list">{% for w in sel.what_changed %}<li>{{ w }}</li>{% endfor %}</ul>
+      {% endif %}
+      {% endif %}
+    </div></div>
+    <div class="panel"><div class="panel-h">Signals</div>
+      <div class="panel-b">
+        <div class="chart-legend">
+          <span class="lg"><i class="lg-line" style="border-top-color:#4263eb"></i> Within range</span>
+          <span class="lg"><i class="lg-line" style="border-top-color:#fa5252"></i> Drift</span>
+          <span class="lg"><i class="lg-band"></i> Normal range (p10–p90)</span>
+          <span class="lg"><i class="lg-dash"></i> Version marker</span>
+        </div>
+        <div id="chartArea"></div>
+      </div>
+    </div>
+    {% else %}
+    <div class="panel"><div class="d2-empty">Select a finding.</div></div>
+    {% endif %}
+  </div>
+
+  <!-- RIGHT: related changes + suggested next checks + event timeline -->
+  <div class="col-lg-4">
+    {% if sel %}
+    {% if related_changes %}
+    <div class="panel mb-3"><div class="panel-h">Potentially related changes</div>
+      <div class="panel-b pt-1">
+        {% for ch in related_changes %}
+        <a class="ev-row noico" href="{{ ch.link }}" title="Open in Event Timeline">
+          <div class="ev-body">
+            <div class="ev-title">{{ ch.title }}</div>
+            {% if ch.subtitle %}<div class="ev-sub">{{ ch.subtitle }}</div>{% endif %}
+          </div>
+          <div class="ev-meta"><span class="ev-badge">Run {{ ch.run }}</span></div>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    <div class="panel mb-3"><div class="panel-h">Suggested next checks</div>
+      <div class="panel-b">
+        <ol class="nc-list" id="nc-templated">
+          {% for n in sel.next_checks %}<li>{{ n }}</li>{% endfor %}
+        </ol>
+        <div id="nc-ai" class="d2-ai-out" style="display:none"></div>
+        <button class="ai-cta" id="nc-btn" onclick="genChecks(this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z"/><path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8z"/></svg>
+          <span class="ai-cta-label">Generate AI suggestions</span>
+        </button>
+      </div>
+    </div>
+    {% endif %}
+    <div class="panel"><div class="panel-h">Event timeline</div>
+      <div class="panel-b">
+        {% if events_tl %}
+        <div class="tl">
+          {% set ns = namespace(drawn=false) %}
+          {% for e in events_tl %}
+          {% if not ns.drawn and drift_start is not none and e.run >= drift_start %}
+          <div class="tl-divider">drift started · run #{{ drift_start }}</div>
+          {% set ns.drawn = true %}
+          {% endif %}
+          <a class="tl-ev {{ e.cls }}" href="{{ e.link }}" title="Open in Event Timeline">
+            <div class="tl-when">run #{{ e.run }}{% if e.when %} · {{ e.when|et }}{% endif %}</div>
+            <div class="tl-title">{{ e.title }} <span class="tl-go">→</span></div>
+            {% if e.detail %}<div class="tl-detail">{{ e.detail }}</div>{% endif %}
+          </a>
+          {% endfor %}
+          {% if not ns.drawn and drift_start is not none %}
+          <div class="tl-divider">drift started · run #{{ drift_start }}</div>
+          {% endif %}
+        </div>
+        <a class="tl2-all mt-2" href="/changelog">View full timeline →</a>
+        {% else %}<div class="text-muted small">No events in this window.</div>{% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script>
+  function tsSearch(e){ if(e.key==='Enter'){ const v=(e.target.value||'').trim().toLowerCase();
+    if(/^\d+(m|h|d)$/.test(v)){ e.preventDefault(); location='/drift2?range='+v; } } }
+
+  const CHARTS = {{ charts_json|safe }};
+  const MARKERS = {{ markers_json|safe }};
+  const DRIFT_START = {{ drift_start if drift_start is not none else 'null' }};
+  const MAX_X = {{ (run_count - 1) if run_count else 0 }};   // shared x-axis for all charts
+
+  // shaded p10-p90 band
+  const bandPlugin = { id:'band', beforeDatasetsDraw(c){ const b=c.$band; if(!b) return;
+    const {ctx, chartArea:{left,right}, scales:{y}}=c;
+    const a=y.getPixelForValue(b.p90), z=y.getPixelForValue(b.p10);
+    ctx.save(); ctx.fillStyle='rgba(66,99,235,.12)'; ctx.fillRect(left, Math.min(a,z), right-left, Math.abs(z-a)); ctx.restore(); } };
+  // dashed version markers
+  const markerPlugin = { id:'vmarkers', afterDatasetsDraw(c){ const {ctx, chartArea:{top,bottom}, scales:{x}}=c;
+    (MARKERS||[]).forEach(m=>{ const px=x.getPixelForValue(m.x); if(px==null) return;
+      ctx.save(); ctx.strokeStyle='#4263eb'; ctx.setLineDash([4,3]); ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(px,top); ctx.lineTo(px,bottom); ctx.stroke();
+      ctx.setLineDash([]); ctx.fillStyle='#4263eb'; ctx.font='600 9px sans-serif'; ctx.fillText(m.label, px+2, top+9); ctx.restore(); }); } };
+
+  // All signal charts share the run x-axis; hovering one syncs the crosshair +
+  // tooltip on all the others at the same run.
+  const D2_CHARTS = [];
+  function syncHover(src, evt) {
+    const hit = src.getElementsAtEventForMode(evt, 'index', { intersect: false }, false);
+    if (!hit.length) { clearHover(); return; }
+    const xVal = src.data.datasets[0].data[hit[0].index].x;
+    D2_CHARTS.forEach(ch => {
+      if (ch === src) return;
+      const idx = ch.data.datasets[0].data.findIndex(p => p.x === xVal);
+      if (idx < 0) { ch.setActiveElements([]); ch.tooltip.setActiveElements([], { x: 0, y: 0 }); ch.update('none'); return; }
+      const el = ch.getDatasetMeta(0).data[idx];
+      ch.tooltip.setActiveElements([{ datasetIndex: 0, index: idx }], { x: el.x, y: el.y });
+      ch.setActiveElements([{ datasetIndex: 0, index: idx }]);
+      ch.update('none');
+    });
+  }
+  function clearHover() {
+    D2_CHARTS.forEach(ch => { ch.setActiveElements([]); ch.tooltip.setActiveElements([], { x: 0, y: 0 }); ch.update('none'); });
+  }
+
+  const area = document.getElementById('chartArea');
+  if (area) {
+    if (!CHARTS.length) area.innerHTML = '<div class="text-muted small">No metric series for this finding.</div>';
+    CHARTS.forEach((c, i) => {
+      const box = document.createElement('div'); box.className = 'd2-chart';
+      const help = c.help ? `<span class="qmark" data-tip="${c.help.replace(/"/g,'&quot;')}">i</span>` : '';
+      box.innerHTML = `<div class="ttl">${c.label}${help}</div><div style="height:140px"><canvas id="dc${i}"></canvas></div>`;
+      area.appendChild(box);
+      const seg = ctx => (DRIFT_START !== null && ctx.p0.parsed.x >= DRIFT_START) ? '#fa5252' : '#4263eb';
+      const ch = new Chart(document.getElementById('dc' + i), {
+        type: 'line',
+        data: { datasets: [{ data: c.points, borderWidth: 2.2, pointRadius: 0, pointHoverRadius: 4,
+                             pointHoverBackgroundColor: '#4263eb', tension: .25,
+                             borderColor: '#4263eb', segment: { borderColor: seg } }] },
+        options: { responsive: true, maintainAspectRatio: false, parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+                   // hover anywhere along the line → show that run's value
+                   interaction: { mode: 'index', intersect: false, axis: 'x' },
+                   plugins: { legend: { display: false },
+                              tooltip: { displayColors: false, padding: 8,
+                                         callbacks: {
+                                           title: (it) => 'run ' + it[0].parsed.x,
+                                           label: (it) => c.label + ': ' + (+it.parsed.y).toLocaleString(undefined, {maximumFractionDigits: 4})
+                                         } } },
+                   animation: false,
+                   scales: { x: { type: 'linear', min: 0, max: MAX_X, ticks: { maxTicksLimit: 6, font: { size: 9 } } },
+                             y: { ticks: { font: { size: 9 } } } } },
+        plugins: [bandPlugin, markerPlugin]
+      });
+      ch.$band = c.band;
+      D2_CHARTS.push(ch);
+      const cv = document.getElementById('dc' + i);
+      cv.addEventListener('mousemove', e => syncHover(ch, e));
+      cv.addEventListener('mouseleave', clearHover);
+    });
+  }
+
+  function genChecks(btn){
+    const out = document.getElementById('nc-ai');
+    const lbl = btn.querySelector('.ai-cta-label') || btn;
+    btn.disabled = true; lbl.textContent = 'Generating…';
+    out.style.display = 'block'; out.className = 'd2-ai-out muted'; out.textContent = 'Asking the model…';
+    fetch('/drift2/next-checks' + window.location.search)
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok) {
+          const items = (d.text || '').split('\n').map(s => s.replace(/^[-*•]\s*/, '').trim()).filter(Boolean);
+          out.className = 'd2-ai-out';
+          out.innerHTML = '<div class="d2-ai-tag">AI-suggested</div><ol class="nc-list">'
+            + items.map(t => '<li>' + t.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])) + '</li>').join('') + '</ol>';
+          document.getElementById('nc-templated').style.display = 'none';
+          lbl.textContent = 'Regenerate';
+        } else {
+          out.className = 'd2-ai-out muted'; out.textContent = d.text || 'AI suggestion unavailable.';
+          lbl.textContent = 'Try again';
+        }
+        btn.disabled = false;
+      })
+      .catch(() => { out.className = 'd2-ai-out muted'; out.textContent = 'Request failed.';
+                     lbl.textContent = 'Try again'; btn.disabled = false; });
+  }
+
+  // Path-drift DAG flowcharts (vis-network is loaded globally in base.html).
+  const PATH_GRAPHS = {{ path_graphs_json|safe }};
+  function initPathGraph(elId, data){
+    const el = document.getElementById(elId);
+    if(!el || !data || !data.nodes || !data.nodes.length || typeof vis === 'undefined') return;
+    const network = new vis.Network(el,
+      { nodes: new vis.DataSet(data.nodes), edges: new vis.DataSet(data.edges) },
+      { layout:{ hierarchical:{ enabled:true, direction:'LR', sortMethod:'directed',
+                 levelSeparation:150, nodeSpacing:56, treeSpacing:44 } },
+        physics:false,
+        interaction:{ hover:false, zoomView:true, dragView:true, dragNodes:false, selectable:false, keyboard:false },
+        nodes:{ shape:'box', margin:8, widthConstraint:{ minimum:70 }, font:{ size:12, color:'#1a1a2e' },
+                shadow:{ enabled:true, size:4, x:0, y:1, color:'rgba(0,0,0,0.10)' } },
+        edges:{ arrows:{ to:{ enabled:true, scaleFactor:0.6 } },
+                smooth:{ type:'cubicBezier', forceDirection:'horizontal', roundness:0.4 } } });
+    const ZMIN=0.4, ZMAX=2.5;
+    network.on('zoom', p => { if(p.scale<ZMIN) network.moveTo({scale:ZMIN}); else if(p.scale>ZMAX) network.moveTo({scale:ZMAX}); });
+    network.once('afterDrawing', () => network.fit({ animation:false }));
+    if(getComputedStyle(el).position === 'static') el.style.position = 'relative';
+    const rb = document.createElement('button'); rb.textContent='⤺ Reset'; rb.className='pgraph-reset';
+    rb.onclick = () => network.fit({ animation:{ duration:300, easingFunction:'easeInOutCubic' } });
+    el.appendChild(rb);
+  }
+  Object.keys(PATH_GRAPHS).forEach(id => initPathGraph(id, PATH_GRAPHS[id]));
+</script>
+{% endblock %}

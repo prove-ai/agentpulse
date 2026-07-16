@@ -1,0 +1,89 @@
+{
+  "_comment": "AgentPulse import format. Fill in 'runs'. Each run is one execution of your multi-agent system. Only 'steps' (the ordered agent turns) are required per run; AgentPulse derives totals, cost, sequence, handoffs, and the parallel DAG for you. Import with: python scripts/import_runs.py thisfile.json",
+
+  "db_name": "partner_system",
+
+  "runs": [
+    {
+      "run_id": "2026-06-15-run-001",
+      "task_text": "Analyze AAPL and recommend a position",
+      "task_type": "financial-analysis",
+      "prompt_version": 1,
+      "timestamp": "2026-06-15T10:00:00Z",
+      "status": "OK",
+      "termination_reason": "completed",
+
+      "steps": [
+        {
+          "agent": "start_node",
+          "model": "",
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "start_time_ms": 0,
+          "duration_ms": 5,
+          "status": "OK"
+        },
+        {
+          "agent": "ben_graham_agent",
+          "model": "claude-sonnet-4-6",
+          "input_tokens": 1382,
+          "output_tokens": 646,
+          "start_time_ms": 5,
+          "duration_ms": 12000,
+          "status": "OK",
+          "parallel_group": "analysts",
+          "tools": [
+            {"name": "get_financials", "success": true, "duration_ms": 400}
+          ]
+        },
+        {
+          "agent": "cathie_wood_agent",
+          "model": "claude-sonnet-4-6",
+          "input_tokens": 1559,
+          "output_tokens": 534,
+          "start_time_ms": 5,
+          "duration_ms": 13900,
+          "status": "OK",
+          "parallel_group": "analysts"
+        },
+        {
+          "agent": "risk_management_agent",
+          "model": "",
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "start_time_ms": 13905,
+          "duration_ms": 90,
+          "status": "OK"
+        },
+        {
+          "agent": "portfolio_manager",
+          "model": "claude-sonnet-4-6",
+          "input_tokens": 975,
+          "output_tokens": 82,
+          "start_time_ms": 13995,
+          "duration_ms": 2400,
+          "status": "OK"
+        }
+      ]
+    }
+  ],
+
+  "_field_notes": {
+    "db_name": "Logical name -> writes db/<db_name>.db. The dashboard sidebar lists every db/*.db.",
+    "run_id": "Optional. Any unique string. Auto-generated (UUID) if omitted.",
+    "task_type": "Groups like-with-like for drift/anomaly comparison. Keep it stable across runs of the same workflow.",
+    "prompt_version": "Integer. Bump it when you change prompts so the dashboard can show version drift. Baseline is 1.",
+    "timestamp": "ISO-8601. Optional (defaults to now). Use real times so the trends window works.",
+    "status": "OK or ERROR for the whole run.",
+    "termination_reason": "Free text, e.g. 'completed', 'error', 'max_rounds'. Anything not clean is flagged.",
+    "steps[].agent": "Required. The agent/node name for this turn.",
+    "steps[].model": "Model id (e.g. claude-sonnet-4-6, gpt-4o). Drives cost. Leave '' for non-LLM steps.",
+    "steps[].input_tokens / output_tokens": "Per-step token counts. 0 for steps that made no LLM call.",
+    "steps[].start_time_ms / duration_ms": "Timing. start_time_ms is relative to run start (or epoch ms) — use equal start times for steps that ran in parallel. If start_time_ms is omitted, steps are laid end-to-end.",
+    "steps[].status": "OK or ERROR for this step. Optional (default OK).",
+    "steps[].parallel_group": "Optional. Give the SAME label to consecutive steps that ran concurrently; AgentPulse turns them into a fan-out group, with the prior step as the fan-out parent and the next step as the join.",
+    "steps[].tools": "Optional list of {name, success, duration_ms} for tool calls this step made.",
+    "steps[].llm_retries": "Optional integer — how many times this step's LLM call was retried (transient error / failed parse). Feeds the retry-rate drift signal. Default 0.",
+    "steps[].config": "Optional object describing this step's config for change tracking / versioning: {params: {temperature, max_tokens}, tools: [names available], system_prompt: '...'}. model comes from steps[].model. system_prompt is hashed (system-message-only). Lets the dashboard detect when prompt/model/tools/params changed."
+  }
+}

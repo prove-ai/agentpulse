@@ -1,0 +1,377 @@
+# ============================================================================
+# Handoff drift detection rules — edit this file to tune detection.
+# No code changes or restart needed: the dashboard reloads this on each request.
+#
+# HOW A RULE WORKS
+#   A rule FIRES when:  every condition in `all` is true
+#                       AND (at least one condition in `any` is true,
+#                            or `any` is empty/omitted).
+#
+# CONDITION FORMAT
+#   {metric: <name>, op: <operator>, value: <number>}
+#
+#   operators:
+#     gt      value is greater than          (val >  value)
+#     lt      value is less than             (val <  value)
+#     gte     greater than or equal          (val >= value)
+#     lte     less than or equal             (val <= value)
+#     abs_gt  magnitude greater than         (|val| >  value)
+#     abs_lt  magnitude less than            (|val| <  value)
+#
+#   metrics (all are PERCENT CHANGE, recent half vs early half):
+#     payload_change            sender output tokens
+#     target_duration_change    receiver duration
+#     target_output_change      receiver output tokens
+#     reinvocation_change       receiver re-invocation rate
+#     failure_change            run failure rate
+#     success_change            final success rate   (negative = got worse)
+#     remaining_duration_change duration of the run AFTER this handoff
+#     remaining_tokens_change   tokens of the run AFTER this handoff
+#     remaining_handoffs_change # of handoffs AFTER this one
+#     frequency_change          how often this handoff fires (per run)
+#
+#   `priority` decides which rule writes the headline when several fire
+#   (lower number = higher priority).
+#   `insight` supports {a} (sender) and {b} (receiver) placeholders.
+# ============================================================================
+
+rules:
+
+  downstream_instability:
+    priority: 1
+    title: "Downstream instability drift"
+    insight: "{a} → {b} itself looks stable, but the run after this handoff has become unstable. Investigate what changed downstream of {b}."
+    all:
+      - {metric: success_change, op: abs_lt, value: 5}
+    any:
+      - {metric: reinvocation_change, op: gt, value: 25}
+      - {metric: remaining_handoffs_change, op: gt, value: 25}
+      - {metric: success_change, op: lt, value: -5}
+
+  weak_context:
+    priority: 2
+    title: "Weak context drift"
+    insight: "{a} is sending smaller payloads to {b}, and {b} is becoming less reliable. Check whether {a} is under-providing context."
+    all:
+      - {metric: payload_change, op: lt, value: -30}
+    any:
+      - {metric: reinvocation_change, op: gt, value: 20}
+      - {metric: failure_change, op: gt, value: 10}
+      - {metric: success_change, op: lt, value: -5}
+
+  payload_bloat:
+    priority: 3
+    title: "Payload bloat drift"
+    insight: "{a} is sending larger payloads to {b}, and {b} is taking longer with more re-invocations. Check whether {a}'s output has grown unnecessarily."
+    all:
+      - {metric: payload_change, op: gt, value: 30}
+    any:
+      - {metric: target_duration_change, op: gt, value: 20}
+      - {metric: reinvocation_change, op: gt, value: 20}
+      - {metric: target_output_change, op: gt, value: 30}
+
+  routing_pressure:
+    priority: 4
+    title: "Routing pressure drift"
+    insight: "{a} → {b} is firing more often and is now driving cost, latency, or failures downstream. Check whether the router is over-using this path."
+    all:
+      - {metric: frequency_change, op: gt, value: 25}
+    any:
+      - {metric: remaining_duration_change, op: gt, value: 20}
+      - {metric: remaining_tokens_change, op: gt, value: 25}
+      - {metric: success_change, op: lt, value: -5}
+
+  latency_drift:
+    priority: 5
+    title: "Handoff latency drift"
+    insight: "{b} is taking longer after this handoff, but payload and routing have not changed much. The slowdown is likely inside {b} itself."
+    all:
+      - {metric: target_duration_change, op: gt, value: 30}
+      - {metric: payload_change, op: abs_lt, value: 10}
+      - {metric: frequency_change, op: abs_lt, value: 10}
+    any: []
+
+  expensive_handoff:
+    priority: 6
+    title: "Expensive handoff drift"
+    insight: "{a} → {b} is consuming more tokens downstream without improving success. Check whether this path is worth its cost."
+    all:
+      - {metric: remaining_tokens_change, op: gt, value: 25}
+      - {metric: success_change, op: lte, value: 0}
+    any: []
+
+# ----------------------------------------------------------------------------
+# Structural rules — these are NOT metric-threshold rules. They fire from the
+# route appearing / disappearing / changing with no matching pattern. Only the
+# wording is configurable here.
+# ----------------------------------------------------------------------------
+structural_rules:
+  new_route:
+    title: "New route detected"
+    insight: "{a} → {b} is a new path that did not exist earlier. Check whether it is absorbing traffic from a route that used to handle this work."
+  vanished_route:
+    title: "Vanished route"
+    insight: "This route disappeared in the recent window. Check whether traffic that previously used {b} is now being routed to a longer or less successful path."
+  unspecified:
+    title: "Unspecified drift"
+    insight: "{a} → {b} has changed by a meaningful amount but doesn't match a known drift pattern. Worth a manual look."
+
+# ----------------------------------------------------------------------------
+# Severity score — weighted sum of bad-direction deltas. Higher = more serious.
+# Directional metrics only count when they move the harmful way; payload and
+# frequency count in either direction (both bloat and starvation can hurt).
+# ----------------------------------------------------------------------------
+severity_weights:
+  success_drop:            3      # how far final success rate fell
+  reinvocation_up:         2
+  remaining_duration_up:   2
+  remaining_tokens_up:     2
+  payload_change_abs:      1
+  frequency_change_abs:    1
+
+# ----------------------------------------------------------------------------
+# Risk level cutoffs.
+# ----------------------------------------------------------------------------
+risk:
+  high_success_drop: 10     # success rate falling >= this (pts) → High
+  high_severity:     200    # severity >= this → High regardless
+  low_severity:      60     # severity < this (when a rule fired) → Low
+                            # in between → Medium
+
+# ----------------------------------------------------------------------------
+# Guards & structural-route detection.
+# ----------------------------------------------------------------------------
+guards:
+  min_occurrences_per_half:   3    # need this many in EACH half for metric drift
+  unspecified_floor:          30   # any metric moving >= this with no rule match
+                                   # surfaces as "Unspecified drift"
+  replacement_min_share_gain: 15   # a route must gain >= this % share to be
+                                   # called a "likely replacement"
+  noise_floor:                10   # used by latency_drift's abs_lt checks
+
+# ============================================================================
+# AGENT DRIFT — per-agent behaviour change, shown on the Agent health cards.
+# Same condition format as handoff rules. Metrics (percent change, recent half
+# vs early half) available to agent rules:
+#     output_change         output tokens
+#     input_change          input tokens
+#     latency_change        per-agent latency (p50 duration)
+#     reinvocation_change   how often the agent gets re-invoked in a run
+#     success_change        final success rate of runs using this agent
+#     downstream_rework_change    repeat agent calls AFTER this agent (rework)
+# ============================================================================
+agent_rules:
+  verbosity_drift:
+    priority: 1
+    label: "Verbosity"
+    title: "Verbosity drift"
+    clause: "producing more output"
+    all:
+      - {metric: output_change, op: gt, value: 30}
+
+  context_overload:
+    priority: 2
+    label: "Context overload"
+    title: "Context overload"
+    clause: "receiving more input context"
+    all:
+      - {metric: input_change, op: gt, value: 30}
+
+  latency_drift:
+    priority: 3
+    label: "Latency"
+    title: "Latency drift"
+    clause: "taking longer"
+    all:
+      - {metric: latency_change, op: gt, value: 30}
+
+  routing_drift:
+    priority: 4
+    label: "Routing"
+    title: "Routing drift"
+    clause: "being re-invoked more often"
+    all:
+      - {metric: reinvocation_change, op: gt, value: 20}
+
+  instability_drift:
+    priority: 5
+    label: "Instability"
+    title: "Instability drift"
+    clause: "leading to less successful runs"
+    all:
+      - {metric: success_change, op: lt, value: -5}
+
+# How each evidence/impact row is COLORED — by risk, not by direction.
+# A row's concern tier is the first matching threshold (checked high→medium).
+# `dir` says which direction is harmful: up = increases are bad, down = drops
+# are bad, both = either direction past the magnitude is notable.
+agent_concern:
+  output_change:             {dir: up,   high: 100, medium: 50}
+  input_change:              {dir: up,   high: 80,  medium: 30}
+  # Latency is a BEHAVIOUR signal in the risk classifier (a change, not a risk),
+  # so it gets no concern tier — its evidence cell stays neutral, never medium/high.
+  reinvocation_change:       {dir: up,   high: 25,  medium: 10}
+  success_change:            {dir: down, high: 10,  medium: 1}
+  downstream_rework_change:  {dir: up,   high: 50,  medium: 20}
+
+# An agent is "Drifting" if >=2 rules fire OR any high-concern row exists;
+# "Watch" if exactly 1 rule fires; otherwise "Stable".
+agent_status:
+  drifting_min_rules: 2
+  # Agents need this many appearances in EACH half to be comparable. Kept lower
+  # than the handoff guard (3) because individual agents have fewer data points.
+  min_occurrences_per_half: 2
+  # Agents that appear in only ONE half get a lightweight "info" card (New /
+  # Retired) instead of a drift card, if they appear at least this many times
+  # in the half they're present in. Avoids one-off noise.
+  info_min_occurrences: 2
+
+
+# ===========================================================================
+# Behavior / impact risk classifier (per-agent, early-half vs recent-half).
+#
+# Philosophy: a *change* in how an agent operates ("behavior") is only Watch.
+# Risk escalates only when the change *hurts outcomes* ("impact").
+#
+# Units:  *_delta   = relative fraction   (0.30  = +30%)
+#         *_delta_pp / *_pp = percentage POINTS (5 = +5 points on a 0-100 rate)
+#         final_success_delta = success-rate point change as a fraction
+#                               (-0.15 = a 15-point success drop)
+# ===========================================================================
+agent_risk:
+  min_runs: 5                 # fewer total appearances -> "Insufficient data"
+
+  # A behavior signal fires when its delta crosses the threshold. The agent's
+  # OWN latency is behaviour (a change in how it works), never a risk by itself.
+  behavior:
+    latency_delta:        {op: gte, value: 0.30}
+    input_tokens_delta:   {op: gte, value: 0.50}
+    output_tokens_delta:  {op: out, low: -0.40, high: 0.50}   # up >=50% OR down <=-40%
+    tool_calls_delta:     {op: gte, value: 0.30}
+    cost_delta:           {op: gte, value: 0.30}
+
+  # An impact signal fires when its delta crosses the threshold. Note: downstream
+  # and end-to-end latency ARE impacts — they mean this agent's change slowed the
+  # rest of the system / the whole run (an outcome), unlike its own latency.
+  impact:
+    final_success_delta:      {op: lte, value: -0.05}
+    re_invocation_delta_pp:   {op: gte, value: 5}
+    retry_rate_delta_pp:      {op: gte, value: 5}
+    error_rate_delta_pp:      {op: gte, value: 3}
+    downstream_rework_delta:  {op: gte, value: 0.10}
+    downstream_latency_delta: {op: gte, value: 0.20}
+    end_to_end_latency_delta: {op: gte, value: 0.20}
+    cost_per_success_delta:   {op: gte, value: 0.20}
+
+  # Critical overrides (checked before the behavior/impact table).
+  critical:
+    success_drop:     -0.15   # final_success_delta <= this  -> Critical
+    error_spike_pp:   15      # error_rate_delta_pp   >= this -> Critical
+    timeout_spike_pp: 15      # timeout_rate_delta_pp >= this -> Critical
+
+  # behavior>0 AND impact>=this  -> High   (impact==1 -> Medium; impact==0 -> Watch)
+  high_min_impact: 2
+
+  # Thin-data guard: under `runs_below` runs, knock High/Critical down to Medium
+  # UNLESS the regression is genuinely severe.
+  sample_cap:
+    runs_below: 20
+    keep_if_success_below: -0.10   # success dropped more than this (e.g. -0.12) -> keep
+    keep_if_error_pp_above: 10     # OR error rose more than this -> keep
+
+  confidence:
+    low_below: 20        # < this        -> Low confidence
+    medium_below: 50     # < this        -> Medium confidence (else High)
+
+
+# ===========================================================================
+# Metric Drift View — control band for the per-run metric charts.
+# A run's value is "drifting" when it falls outside  mean ± k*sigma  of the
+# baseline (first `baseline_runs` runs). Generic — applies to ANY metric, no
+# per-metric rules. A sustained breach (>= `consecutive`) marks the drift start.
+# ===========================================================================
+metric_band:
+  baseline_runs: 10    # runs used to compute the baseline mean/sigma
+  k: 3.0               # band width in sigmas (lower = more sensitive / more red)
+  consecutive: 2       # consecutive out-of-band runs to call it a sustained drift
+
+
+# ===========================================================================
+# Path / route drift — fixed-routing assumption. The "default route" is the
+# dominant agent sequence in the baseline window. Route drift fires on a NEW
+# route (absent in the baseline) or a RISING one (recent share up by at least
+# `rise_threshold`), provided it occurs in >= `min_variant_runs` recent runs.
+# A steady, known low-rate fallback therefore stays quiet.
+# ===========================================================================
+path_drift:
+  min_runs: 8            # need at least this many runs before assessing
+  min_variant_runs: 2    # a variant must occur this many times to count (ignore singletons)
+  rise_threshold: 0.15   # a known variant whose recent share rises >= this (15 pts) = drift
+  high_if_skipped: true  # a variant that SKIPS a default step -> High risk
+
+
+# ===========================================================================
+# METRIC DRIFT — directional, tiered, corroborated drift detection.
+#
+# The investigation GATE is a Tier-0 (outcome) metric. Behaviour metrics only
+# corroborate. For each metric we compare a RECENT window mean to a BASELINE
+# window mean:
+#   unit pp  : rate metric in [0,1]; delta = (recent-baseline)*100 percentage pts
+#              (token_share is already 0-100 -> scale: pct100, no *100)
+#   unit pct : magnitude; delta = (recent-baseline)/baseline * 100 percent
+#   unit abs : count; delta = recent-baseline in raw units
+#   source   : for rate metrics derived from a count series ("had >=1 event")
+#   dir      : up | down | both  (only the BAD direction counts, except `both`)
+#   tier     : 0 outcome/trigger · 1 supporting · 2 context · 3 ignore-for-now
+#
+# A per-run BREACH (decides WHEN to start) = a bad event that run (rate) or the
+# run value crossing baseline_mean*(1+watch) (magnitude). The recent mean DELTA
+# (decides HOW BAD) lands in watch/drift/high.
+# ===========================================================================
+metric_drift:
+  baseline_runs: 10        # first N runs = baseline
+  recent_runs: 10          # trailing window for the mean delta
+  start_consecutive: 2     # Tier-0 per-run breaches in a row to start an investigation
+  start_m_of_n: [3, 5]     # ...OR breaches in M of the last N runs
+  exclude_from_corroboration: [parallelism_factor]
+  # Severity escalation: only supporters at these bands count toward "Critical"
+  # (watch-band signals are too weak); a corroborating config change is ignored if
+  # its (scope, dimension) recurs more than change_recurrence_max times (a routine
+  # per-release prompt bump shouldn't corroborate a drift).
+  strong_support_bands: [drift, high]
+  change_recurrence_max: 2
+  # Recovery / expiry: a drift that has been back within normal for this many recent
+  # runs is treated as resolved and no longer surfaced (a spike that recovered is
+  # not "today's" problem).
+  recovery_grace: 2
+  # Cause attribution: a config change is a candidate CAUSE only if it happened at or
+  # before the drift start, within this many runs, on the SAME or an UPSTREAM
+  # component. Used by BOTH severity escalation (_nearby_change) and the
+  # "Potentially related changes" panel, so they agree on what counts as a cause.
+  related_change_window: 3
+
+  metrics:
+    # --- agents ---
+    success:            {scope: agents,   tier: 0, dir: down, unit: pp,  watch: 3,  drift: 5,  high: 10}
+    error_rate:         {scope: agents,   tier: 0, dir: up,   unit: pp,  watch: 3,  drift: 5,  high: 10, source: errors}
+    retry_rate:         {scope: agents,   tier: 1, dir: up,   unit: pp,  watch: 5,  drift: 10, source: retries}
+    reinvocation_rate:  {scope: agents,   tier: 1, dir: up,   unit: pp,  watch: 5,  drift: 10, source: reinvoked}
+    latency_s:          {scope: agents,   tier: 1, dir: up,   unit: pct, watch: 25, drift: 45, abs: {watch: 2.0, drift: 5.0, high: 10.0}}
+    tool_calls:         {scope: agents,   tier: 2, dir: both, unit: pct, watch: 30, drift: 50, abs: {watch: 2, drift: 5, high: 10}}
+    tokens:             {scope: agents,   tier: 2, dir: both, unit: pct, watch: 30, drift: 50}
+    cost_usd:           {scope: agents,   tier: 2, dir: up,   unit: pct, watch: 25, drift: 50}
+    token_share:        {scope: agents,   tier: 2, dir: up,   unit: pp,  watch: 10, drift: 17, scale: pct100}
+    # --- handoffs ---
+    hop_latency_s:      {scope: handoffs, tier: 0, dir: up,   unit: pct, watch: 30, drift: 50, abs: {watch: 1.0, drift: 3.0, high: 6.0}}
+    payload_tokens:     {scope: handoffs, tier: 1, dir: both, unit: pct, watch: 30, drift: 60, abs: {watch: 300, drift: 800, high: 2000}}
+    context_ratio:      {scope: handoffs, tier: 1, dir: both, unit: pct, watch: 30, drift: 50, abs: {watch: 1.0, drift: 3.0, high: 6.0}}
+    frequency:          {scope: handoffs, tier: 2, dir: both, unit: pct, watch: 20, drift: 40, abs: {watch: 1, drift: 3, high: 6}}
+    # --- path ---
+    route_conformance:  {scope: path,     tier: 0, dir: down, unit: pp,  watch: 5,  drift: 10, high: 20, floor: 0.7}
+    e2e_latency_s:      {scope: path,     tier: 0, dir: up,   unit: pct, watch: 25, drift: 45, abs: {watch: 5.0, drift: 15.0, high: 30.0}}
+    path_length:        {scope: path,     tier: 1, dir: both, unit: abs, watch: 1,  drift: 2}
+    loops:              {scope: path,     tier: 1, dir: up,   unit: abs, watch: 1,  drift: 1}
+    reentry_count:      {scope: path,     tier: 1, dir: up,   unit: abs, watch: 0.5, drift: 1}
+    token_concentration: {scope: path,    tier: 2, dir: up,   unit: pp,  watch: 10, drift: 17}
+    context_growth_pct: {scope: path,     tier: 2, dir: up,   unit: pct, watch: 25, drift: 50}
+    parallelism_factor: {scope: path,     tier: 3, dir: both, unit: pct, watch: 20, drift: 40}

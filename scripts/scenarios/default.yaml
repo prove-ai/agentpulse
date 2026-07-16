@@ -1,0 +1,27 @@
+# Default batch — build a baseline of runs across common task types.
+#
+# Run with:
+#   python scripts/batch_run.py
+#
+# Each scenario is repeated `runs:` times so the trend view has data to
+# work with. Same question across reps so paired version comparison works
+# later if you bump prompt_version.
+
+scenarios:
+  # CSV-analysis path (DataAnalyst + tools)
+  - task_type: csv-analysis
+    prompt_version: 1
+    question: "Analyze data/sales.csv and summarize the findings."
+    runs: 3
+
+  # Writing path (Writer + Reviewer)
+  - task_type: email
+    prompt_version: 1
+    question: "Write a customer apology email for a delayed shipment."
+    runs: 3
+
+  # Research path (Research + Writer)
+  - task_type: research
+    prompt_version: 1
+    question: "Research the pros and cons of remote work and summarize."
+    runs: 2

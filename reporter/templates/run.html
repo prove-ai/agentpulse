@@ -1,0 +1,704 @@
+{% extends "base.html" %}
+{% block title %}Run {{ run_id[:8] }} — Observability{% endblock %}
+
+{% block content %}
+<style>
+/* ── Waterfall timeline ─────────────────────────────────────────── */
+.tl-row      { display:flex; align-items:center; padding:6px 0; border-bottom:1px solid #f1f3f5; }
+.tl-row:last-child { border-bottom:none; }
+.tl-name     { width:130px; flex-shrink:0; font-weight:600; font-size:0.88rem; color:#1a1a2e; }
+.tl-name .turn { color:#adb5bd; font-weight:400; font-size:0.72rem; }
+.tl-track    { position:relative; flex-grow:1; height:30px; background:#f8f9fa;
+               border-radius:5px; margin:0 14px; }
+.tl-bar      { position:absolute; top:4px; height:22px; border-radius:4px;
+               display:flex; align-items:center; padding:0 8px; color:white;
+               font-size:0.72rem; font-weight:600; white-space:nowrap; min-width:30px; }
+.tl-facts    { width:240px; flex-shrink:0; font-size:0.78rem; color:#495057; text-align:right; }
+.tl-facts .io   { font-weight:600; }
+.tl-facts .in   { color:#0d6efd; }
+.tl-facts .out  { color:#6f42c1; }
+.tl-facts .cost { color:#198754; }
+.tl-axis     { display:flex; justify-content:space-between; font-size:0.7rem;
+               color:#adb5bd; padding:2px 0 0 144px; }
+
+.chip        { background:#e8eaf6; color:#3949ab; border-radius:5px; padding:2px 9px;
+               font-size:0.8rem; font-weight:600; }
+.tool-chip   { background:#fff3cd; color:#856404; border-radius:4px; padding:1px 7px;
+               font-size:0.72rem; font-weight:600; }
+.status-ok   { background:#e6f4ea; color:#1e6b3a; border-radius:4px; padding:1px 8px; font-size:0.72rem; font-weight:600; }
+.status-fail { background:#fbe7e7; color:#8a1f1f; border-radius:4px; padding:1px 8px; font-size:0.72rem; font-weight:600; }
+.drift-tag   { background:#fbe7e7; color:#8a1f1f; border-radius:3px; padding:1px 6px; font-size:0.68rem; }
+
+.ct td { padding:6px 8px; font-size:0.85rem; vertical-align:middle; }
+.ct th { font-size:0.74rem; text-transform:uppercase; letter-spacing:0.3px; color:#6c757d; }
+/* Align table edges with the card header / intro text (20px gutter) */
+.ct-aligned th:first-child, .ct-aligned td:first-child { padding-left:20px; }
+.ct-aligned th:last-child,  .ct-aligned td:last-child  { padding-right:20px; }
+</style>
+
+<!-- Task -->
+<div class="card mb-3">
+  <div class="card-body py-2 px-4">
+    <div class="text-muted" style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.5px;">Task</div>
+    <div style="font-size:1rem;font-weight:500;">{{ task_text }}</div>
+    <div class="text-muted small">{{ task_type }} · prompt v{{ prompt_version }} · {{ timestamp|et('%Y-%m-%d %H:%M:%S') }} {{ tz_label }}</div>
+  </div>
+</div>
+
+<!-- ═══ INSIGHTS (the headline — what changed & does it matter) ═══ -->
+<style>
+.insight-card { display:flex; gap:12px; padding:12px 16px; border-radius:10px;
+                background:white; box-shadow:0 1px 5px rgba(0,0,0,.07); margin-bottom:10px; }
+.insight-body  { flex-grow:1; }
+.insight-title { font-weight:700; font-size:0.95rem; color:#1a1a2e; }
+.insight-evi   { font-size:0.82rem; color:#495057; margin:2px 0; font-variant-numeric:tabular-nums; }
+.insight-interp{ font-size:0.82rem; color:#6c757d; font-style:italic; }
+.sev-badge     { border-radius:20px; padding:2px 10px; font-size:0.72rem; font-weight:700; }
+.sev-critical    { background:#fbe7e7; color:#8a1f1f; }
+.sev-warning     { background:#fff4e0; color:#7a4a00; }
+.sev-improvement { background:#e6f4ea; color:#1e6b3a; }
+.sev-info        { background:#eef0f6; color:#3a3f55; }
+/* Route-diff disclosure — keeps the agent-name wall hidden until asked for */
+.route-diff      { margin-top:4px; }
+.route-diff > summary { font-size:0.8rem; color:#3949ab; cursor:pointer; width:max-content; }
+.route-diff-body { font-size:0.8rem; color:#495057; margin-top:6px;
+                   font-variant-numeric:tabular-nums; }
+.diff-add { color:#1e6b3a; font-weight:600; }
+.diff-rem { color:#8a1f1f; font-weight:600; }
+</style>
+
+<div class="card mb-4">
+  <div class="card-header card-header-soft d-flex justify-content-between align-items-center">
+    <span>💡 Insights</span>
+    <span>
+      {% if ins_counts.critical %}<span class="sev-badge sev-critical">{{ ins_counts.critical }} critical</span>{% endif %}
+      {% if ins_counts.warning %}<span class="sev-badge sev-warning ms-1">{{ ins_counts.warning }} warning</span>{% endif %}
+      {% if ins_counts.improvement %}<span class="sev-badge sev-improvement ms-1">{{ ins_counts.improvement }} better</span>{% endif %}
+      {% if ins_counts.info %}<span class="sev-badge sev-info ms-1">{{ ins_counts.info }} info</span>{% endif %}
+    </span>
+  </div>
+  <div class="card-body" style="background:#f8f9fa;">
+    {% for ins in insights %}
+    <div class="insight-card {{ ins.severity }}">
+      <div class="insight-body">
+        <div class="insight-title">
+          {{ ins.title }}
+          {% if ins.agent %}<span class="chip ms-1" style="font-size:.72rem;">{{ ins.agent }}</span>{% endif %}
+          {% if ins.kind == 'drift' %}<span class="ms-1 text-muted" style="font-size:.66rem;">vs baseline</span>{% endif %}
+        </div>
+        <div class="insight-evi">{{ ins.evidence }}</div>
+        {% if ins.details %}
+        {% set d = ins.details %}
+        <div class="insight-evi">
+          Usual path: <strong>{{ d.usual_steps }} steps</strong> ·
+          This run: <strong>{{ d.this_steps }} steps</strong>
+        </div>
+        <details class="route-diff">
+          <summary>View route diff</summary>
+          <div class="route-diff-body">
+            {% if d.added %}<div><span class="diff-add">+ {{ d.added|join(', ') }}</span> <span class="text-muted">— used this run, not in usual path</span></div>{% endif %}
+            {% if d.removed %}<div><span class="diff-rem">− {{ d.removed|join(', ') }}</span> <span class="text-muted">— in usual path, skipped this run</span></div>{% endif %}
+          </div>
+        </details>
+        {% endif %}
+        <div class="insight-interp">{{ ins.interpretation }}</div>
+      </div>
+      <div><span class="sev-badge sev-{{ ins.severity }}">{{ ins.category }}</span></div>
+    </div>
+    {% endfor %}
+
+    {% if not vreport %}
+    <div class="text-muted small mt-2 pt-2 border-top">
+      Showing <strong>single-run insights</strong> only (this is the baseline version).
+      <strong>Version drift insights</strong> appear automatically on later prompt versions of
+      this task type, comparing the whole version against the baseline.
+    </div>
+    {% elif not vreport.available %}
+    <div class="text-muted small mt-2 pt-2 border-top">
+      Showing <strong>single-run insights</strong>. Version drift needs ≥3
+      runs per version — {{ vreport.note }}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Key numbers -->
+<div class="row g-2 mb-4">
+  {% for val, label, color in [
+    (metrics.total_turns, "Agent turns", "#0d6efd"),
+    ("{:,}".format(metrics.total_input_tokens), "Input tokens", "#0d6efd"),
+    ("{:,}".format(metrics.total_output_tokens), "Output tokens", "#6f42c1"),
+    ("$%.4f"|format(metrics.total_cost_usd), "Cost", "#198754"),
+    ("%.1fs"|format(metrics.total_wall_clock_ms/1000), "Total time", "#495057"),
+    (metrics.total_tool_calls, "Tool calls", "#fd7e14"),
+  ] %}
+  <div class="col-6 col-md-2">
+    <div style="background:white;border-radius:8px;padding:12px;box-shadow:0 1px 5px rgba(0,0,0,.07);text-align:center;">
+      <div style="font-size:1.4rem;font-weight:700;color:{{ color }};">{{ val }}</div>
+      <div style="font-size:0.66rem;color:#6c757d;text-transform:uppercase;">{{ label }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- ═══ TIMELINE (the hero) ═══ -->
+{% set pf = metrics.parallelism_factor %}
+{% set is_parallel = pf >= 1.5 %}
+{% set is_partial  = pf > 1.1 and pf < 1.5 %}
+<div class="card mb-4">
+  <div class="card-header card-header-soft d-flex justify-content-between align-items-center">
+    <span>
+      Execution Timeline
+      <span class="text-secondary small">— each bar shows when an agent ran and how long it took</span>
+    </span>
+    <span title="Parallelism factor = sum of all agent durations ÷ wall-clock time.&#10;1.0 = fully sequential. >1.0 = agents overlapped in time.&#10;e.g. 2.0 means roughly 2 agents ran in parallel on average."
+          style="font-size:0.78rem; background:{{ '#28a745' if is_parallel else ('#fd7e14' if is_partial else '#495057') }}; padding:3px 10px; border-radius:14px; font-weight:600; cursor:help;">
+      Parallelism {{ "%.2f"|format(pf) }}×
+      {% if is_parallel %} · parallel{% elif is_partial %} · partial overlap{% else %} · sequential{% endif %}
+    </span>
+  </div>
+  <div class="card-body">
+    {% set bar_colors = ['#4361ee','#3a0ca3','#7209b7','#f72585','#4cc9f0','#480ca8','#b5179e'] %}
+    {% for bar in timeline %}
+      {% set color = bar_colors[bar.turn_index % 7] %}
+      <div class="tl-row">
+        <div class="tl-name">
+          {{ bar.agent }}<br><span class="turn">turn {{ bar.turn_index + 1 }}</span>
+        </div>
+        <div class="tl-track">
+          <div class="tl-bar" style="left:{{ bar.offset_pct }}%; width:{{ bar.width_pct }}%; background:{{ color }};">
+            {{ bar.duration_s }}s
+          </div>
+        </div>
+        <div class="tl-facts">
+          <span class="io"><span class="in">{{ "{:,}".format(bar.input_tokens) }}</span> in
+          → <span class="out">{{ "{:,}".format(bar.output_tokens) }}</span> out</span>
+          &nbsp;·&nbsp; <span class="cost">${{ "%.4f"|format(bar.cost) }}</span>
+        </div>
+      </div>
+    {% endfor %}
+    <div class="tl-axis">
+      <span>0s</span>
+      <span>{{ "%.1f"|format(metrics.total_wall_clock_ms/1000) }}s</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Agent chain graph (flow + hover for details) ═══ -->
+<div class="card mb-4">
+  <div class="card-header card-header-soft">
+    Agent Chain
+    <span class="small" style="opacity:.8;">— hover a node or an arrow for details</span>
+  </div>
+  <div class="card-body">
+    <div id="agentGraph" style="height:280px; width:100%;"></div>
+    <div class="d-flex gap-3 flex-wrap mt-2" style="font-size:0.74rem;color:#6c757d;">
+      <span><span style="display:inline-block;width:11px;height:11px;background:#eef2ff;border:1px solid #3949ab;border-radius:2px;"></span> normal</span>
+      <span><span style="display:inline-block;width:11px;height:11px;background:#d4edda;border:2px solid #28a745;border-radius:2px;"></span> finished (APPROVED)</span>
+      <span><span style="display:inline-block;width:11px;height:11px;background:#f8d7da;border:2px solid #dc3545;border-radius:2px;"></span> did not finish cleanly</span>
+      <span><span style="display:inline-block;width:11px;height:11px;background:#fff;border:2px solid #dc3545;border-radius:2px;"></span> drifted vs baseline</span>
+      <span><span style="display:inline-block;width:11px;height:11px;background:#fff3cd;border:1px solid #fd7e14;border-radius:2px;"></span> unexpected re-entry</span>
+      <span style="border-top:2px dashed #adb5bd;width:22px;display:inline-block;margin-bottom:3px;"></span> requested loop-back
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Parallel groups (only when DAG structure is captured) ═══ -->
+{% if parallel_groups %}
+<div class="card mb-4">
+  <div class="card-header card-header-soft d-flex justify-content-between">
+    <span>⚡ Parallel Groups <span class="small text-white-50">({{ parallel_groups|length }})</span></span>
+    {% if has_critical_path %}
+    <span class="small text-white-50">workflow critical path highlighted in graph above</span>
+    {% endif %}
+  </div>
+  <div class="card-body" style="background:#f8f9fa;">
+    {% for g in parallel_groups %}
+    {# Border tier mirrors the efficiency number's colour (Bootstrap text-success/warning/danger) #}
+    {% set eff_color = '#28a745' if g.efficiency >= 0.85 else ('#ffc107' if g.efficiency >= 0.6 else '#dc3545') %}
+    <div class="card mb-3" style="border-left:5px solid {{ eff_color }};">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start mb-2">
+          <div>
+            <div class="text-muted small" style="text-transform:uppercase;letter-spacing:.5px;font-size:.66rem;">
+              Parallel Group #{{ loop.index }}
+            </div>
+            <div class="fw-bold">
+              <span class="chip">{{ g.parent_agent }}</span>
+              <span class="text-muted mx-1">fans out to</span>
+              {{ g.branches|length }} branches
+              {% if g.has_join %}
+                <span class="text-muted mx-1">→ joins at</span>
+                <span class="chip">{{ g.join_agent }}</span>
+              {% else %}
+                <span class="ms-2 small text-muted">(no join)</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="text-end">
+            <div class="fw-bold" style="font-size:1.3rem;color:#198754;">{{ "%.1f"|format(g.wall_clock_ms/1000) }}s</div>
+            <div class="text-muted small">wall clock</div>
+          </div>
+        </div>
+
+        <table class="table table-sm mb-2">
+          <thead class="table-light">
+            <tr>
+              <th>Branch</th>
+              <th class="text-end">Duration</th>
+              {% if g.has_join %}<th class="text-end">Wait at join</th>{% endif %}
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% set bb = g.bottleneck %}
+            {% for b in g.branches|sort(attribute='duration_ms', reverse=true) %}
+            <tr>
+              <td>
+                <span class="chip">{{ b.root_agent }}</span>
+                {% if b.spans|length > 1 %}<span class="text-muted small ms-1"
+                  data-tip="{{ b.spans|map(attribute='agent_name')|join(' | ') }}">→ {{ b.spans|length - 1 }} more</span>{% endif %}
+              </td>
+              <td class="text-end fw-bold">{{ "%.1f"|format(b.duration_ms/1000) }}s</td>
+              {% if g.has_join %}
+              <td class="text-end {{ 'text-muted' if b.branch_id == bb.branch_id else 'text-warning' }}">
+                {% if b.branch_id == bb.branch_id %}—{% else %}+{{ "%.1f"|format((bb.duration_ms - b.duration_ms)/1000) }}s{% endif %}
+              </td>
+              {% endif %}
+              <td>
+                {% if b.branch_id == bb.branch_id %}
+                  <span style="background:#f8d7da;color:#721c24;border-radius:4px;padding:1px 8px;font-size:.72rem;font-weight:700;">⏱ Bottleneck</span>
+                {% elif g.has_join %}
+                  <span class="text-muted small">waiting</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        <div class="d-flex gap-4 small text-muted">
+          <div>
+            <strong>Bottleneck branch:</strong>
+            <span class="chip">{{ g.bottleneck.root_agent }}</span>
+            ({{ "%.1f"|format(g.bottleneck.duration_ms/1000) }}s)
+          </div>
+          {% if g.has_join %}
+          <div>
+            <strong>Join wait:</strong>
+            {% set max_wait = (g.wall_clock_ms - (g.branches|map(attribute='duration_ms')|min)) %}
+            up to {{ "%.1f"|format(max_wait/1000) }}s
+            <span class="text-muted">(fastest branch waited)</span>
+          </div>
+          {% endif %}
+          <div>
+            <strong>Efficiency:</strong>
+            <span class="{% if g.efficiency >= 0.85 %}text-success{% elif g.efficiency >= 0.6 %}text-warning{% else %}text-danger{% endif %} fw-bold">
+              {{ "%.0f"|format(g.efficiency*100) }}%
+            </span>
+            <span class="text-primary" style="cursor:help;font-size:0.9em;"
+                  data-bs-toggle="popover"
+                  data-bs-trigger="hover focus"
+                  data-bs-html="true"
+                  data-bs-placement="top"
+                  data-bs-content="<div style='font-family:monospace;font-size:.8rem;background:#f1f3f5;padding:6px 8px;border-radius:4px;margin-bottom:6px'>
+                    sum(branch durations)<br>÷ (wall clock × N branches)
+                  </div>
+                  <div style='font-size:.78rem;color:#495057'>
+                    For this group:<br>
+                    <code>({{ g.branches | map(attribute='duration_ms') | sum | round(1) / 1000 }}s)
+                    ÷ ({{ '%.1f'|format(g.wall_clock_ms/1000) }}s × {{ g.branches|length }})
+                    = <b>{{ '%.0f'|format(g.efficiency*100) }}%</b></code>
+                  </div>
+                  <div style='font-size:.72rem;color:#6c757d;margin-top:6px'>
+                    100% = perfectly balanced fan-out<br>
+                    Lower = some branches finished early and waited
+                  </div>"
+                  data-bs-custom-class="eff-popover">ⓘ</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- ═══ Bottom: drift + health ═══ -->
+<div class="row g-4">
+  <div class="col-lg-7">
+
+    <!-- Anomalies — this run vs average of prior runs (NOT drift) -->
+    {% if has_baseline %}
+    <div class="card mb-3">
+      <div class="card-header py-2 {{ 'card-header-soft' if report.has_anomaly else 'card-header-soft' }}">
+        Anomalies vs Average <span class="small fw-normal">(single-run variance, not drift)</span>
+        <span class="float-end small">vs avg of {{ report.baseline_run_count }} prior run(s)</span>
+      </div>
+      <div class="card-body p-0">
+        <div class="pt-2 text-muted small" style="padding-left:20px;padding-right:20px;">
+          One run differing from the average is <strong>variance</strong>, not drift. A true drift
+          would require many runs shifting in the same direction (see Version Drift below).
+        </div>
+        <table class="table table-sm ct ct-aligned mb-0">
+          <thead class="table-light">
+            <tr><th style="width:24%;">What we check</th><th style="width:32%;">This run</th><th style="width:28%;">Normal range</th><th class="text-end" style="width:16%;">Verdict</th></tr>
+          </thead>
+          <tbody>
+          {% for v in report.verdicts %}
+          <tr>
+            <td>{{ v.name|replace('_', ' ') }}</td>
+            <td class="fw-semibold">
+              {% if v.name == 'agent_sequence' %}
+                {% set seq = v.current %}
+                {% if seq|length > 2 %}
+                  <span data-tip="{{ seq|join(' | ') }}">{{ seq[0] }} → … → {{ seq[-1] }}</span>
+                {% else %}
+                  {{ seq|join(' → ') }}
+                {% endif %}
+              {% else %}{{ v.current }}{% endif %}
+            </td>
+            <td class="text-muted small">{{ v.note }}</td>
+            <td class="text-end">{% if v.drifted %}<span class="pill pill-warn">{{ v.label|replace('_', ' ') }}</span>{% else %}<span class="pill pill-ok">within range</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {% if report.per_agent_verdicts %}
+    <div class="card mb-3">
+      <div class="card-header card-header-soft py-2">Per-Agent Anomalies <span class="small fw-normal">· this run vs the agent's usual behaviour</span></div>
+      <div class="card-body p-0">
+        {% for agent, verdicts in report.per_agent_verdicts.items() %}
+          {% set drifted = verdicts|selectattr('drifted')|list %}
+          <div class="px-3 pt-2 pb-1 {{ 'border-start border-warning border-3' if drifted else '' }}">
+            <div class="mb-1">
+              <span class="chip">{{ agent }}</span>
+              {% if drifted %}{% for v in drifted %}<span class="ms-1 pill pill-warn">{{ v.label|replace('_', ' ') }}</span>{% endfor %}
+              {% else %}<span class="ms-2 pill pill-ok">normal</span>{% endif %}
+            </div>
+            <table class="table table-sm ct mb-1">
+              <thead><tr><th class="text-muted small">signal</th><th class="text-end text-muted small">this run</th><th class="text-end text-muted small">avg of prior</th><th class="text-end text-muted small">Δ%</th><th class="text-muted small">verdict</th></tr></thead>
+              <tbody>
+              {% for v in verdicts %}
+              <tr>
+                <td style="width:150px;">{{ v.signal|replace('_', ' ') }}</td>
+                <td class="text-end">{{ v.current }}</td>
+                <td class="text-end text-muted">{{ v.baseline }}</td>
+                <td class="text-end">{{ "%+.1f"|format(v.delta_pct) }}%</td>
+                <td>{% if v.drifted %}<span class="pill pill-warn">outside range</span>{% else %}<span class="pill pill-ok">in range</span>{% endif %}</td>
+              </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="card mb-3">
+      <div class="card-header card-header-soft py-2">Anomalies vs Average</div>
+      <div class="card-body text-muted small">First run for this task type — anomaly checks need at least one prior run for comparison.</div>
+    </div>
+    {% endif %}
+
+    <!-- Version comparison (cohort vs cohort) -->
+    {% if vreport and vreport.available %}
+    <div class="card mb-3">
+      <div class="card-header py-2 card-header-soft d-flex justify-content-between">
+        <span>Version Drift · v{{ vreport.target_version }} vs v{{ vreport.base_version }}</span>
+        <span class="small">
+          {% if vreport.mode == 'paired' %}🎯 paired on {{ vreport.paired_questions }} question(s){% else %}~ task-type avg{% endif %}
+          ·
+          {% if vreport.confidence == 'confident' %}confident{% else %}low confidence{% endif %}
+        </span>
+      </div>
+      <div class="card-body p-0">
+        <div class="pt-2 text-muted small" style="padding-left:20px;padding-right:20px;">
+          Comparing {{ vreport.target_runs }} run(s) of v{{ vreport.target_version }}
+          against {{ vreport.base_runs }} run(s) of v{{ vreport.base_version }}.
+          {% if vreport.mode == 'approximate' %}
+            <em>Absolute tokens/cost are hidden — questions differ, so only normalized signals are compared.</em>
+          {% endif %}
+        </div>
+        <!-- Overall -->
+        <table class="table table-sm ct ct-aligned mb-0">
+          <thead class="table-light"><tr><th>Overall</th><th class="text-end">v{{ vreport.base_version }}</th><th class="text-end">v{{ vreport.target_version }}</th><th class="text-end">Δ</th><th class="text-end">Consistency</th><th>Verdict</th></tr></thead>
+          <tbody>
+          {% for v in vreport.overall %}
+          <tr>
+            <td>{{ v.signal }}</td>
+            <td class="text-end text-muted">{% if v.signal == 'typical route' %}{{ v.base|join(' → ') }}{% else %}{{ v.base }}{% endif %}</td>
+            <td class="text-end">{% if v.signal == 'typical route' %}{{ v.target|join(' → ') }}{% else %}{{ v.target }}{% endif %}</td>
+            <td class="text-end">{% if v.signal != 'typical route' %}{{ "%+.1f"|format(v.delta_pct) }}{% if v.signal not in ['avg turns'] %}%{% endif %}{% else %}—{% endif %}</td>
+            <td class="text-end small {{ 'text-muted' if not v.drifted else '' }}">{{ "%.0f"|format(v.consistency*100) }}%</td>
+            <td>
+              {% if v.status == 'drift' %}<span class="pill pill-drift">Drift</span>
+              {% elif v.status == 'potential' %}<span class="pill pill-potential">Potential</span>
+              {% else %}<span class="pill pill-ok">stable</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Per-agent version drift -->
+    <div class="card">
+      <div class="card-header card-header-soft py-2">Per-Agent · v{{ vreport.target_version }} vs v{{ vreport.base_version }}</div>
+      <div class="card-body p-0">
+        {% for agent, verdicts in vreport.per_agent.items() %}
+          {% set confirmed = verdicts|selectattr('status','equalto','drift')|list %}
+          {% set potential = verdicts|selectattr('status','equalto','potential')|list %}
+          {% set border_cls = 'border-start border-danger border-3' if confirmed else ('border-start border-warning border-3' if potential else '') %}
+          <div class="px-3 pt-2 pb-1 {{ border_cls }}">
+            <div class="mb-1">
+              <span class="chip">{{ agent }}</span>
+              {% for v in confirmed %}<span class="ms-1 pill pill-drift">Drift: {{ v.label }}</span>{% endfor %}
+              {% for v in potential %}<span class="ms-1 pill pill-potential">Potential: {{ v.label }}</span>{% endfor %}
+              {% if not confirmed and not potential %}<span class="ms-2 pill pill-ok">no change</span>{% endif %}
+            </div>
+            <table class="table table-sm ct mb-1">
+              <tbody>
+              {% for v in verdicts %}
+              <tr>
+                <td style="width:150px;">{{ v.signal }}</td>
+                <td class="text-end text-muted">v{{ vreport.base_version }}: {{ v.base }}</td>
+                <td class="text-end">v{{ vreport.target_version }}: {{ v.target }}</td>
+                <td class="text-end">{{ "%+.1f"|format(v.delta_pct) }}%</td>
+                <td class="text-end small {{ 'text-muted' if not v.drifted else '' }}">{{ "%.0f"|format(v.consistency*100) }}%</td>
+                <td>
+                  {% if v.status == 'drift' %}<span class="pill pill-drift">Drift</span>
+                  {% elif v.status == 'potential' %}<span class="pill pill-potential">Potential</span>
+                  {% else %}<span class="pill pill-ok">stable</span>{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% else %}
+    <div class="card">
+      <div class="card-header card-header-soft py-2">Version Drift</div>
+      <div class="card-body text-muted small">
+        {% if not vreport %}
+          This run is on the <strong>baseline version</strong> (v{{ base_version }}). Version drift
+          appears on later prompt versions, comparing the whole version against this baseline.
+        {% else %}
+          Not enough data yet. {{ vreport.note }}
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <!-- Health -->
+  <div class="col-lg-5">
+    {% if metrics.unique_tools %}
+    <div class="card mb-3">
+      <div class="card-header card-header-soft py-2">Tools</div>
+      <div class="card-body p-0">
+        <table class="table table-sm ct-aligned mb-0">
+          <thead class="table-light"><tr><th>Tool</th><th>By</th><th class="text-end">Calls</th><th class="text-end">Fail</th></tr></thead>
+          <tbody>
+          {% for tool, freq in metrics.tool_frequency.items() %}
+          <tr>
+            <td><code style="font-size:.8rem;">{{ tool }}</code></td>
+            <td>{% for agent, dist in metrics.tool_distribution_per_agent.items() %}{% if tool in dist %}<span class="chip" style="font-size:.7rem;">{{ agent }}</span>{% endif %}{% endfor %}</td>
+            <td class="text-end">{{ freq }}</td>
+            <td class="text-end {{ 'text-danger fw-bold' if metrics.tool_failure_count else 'text-success' }}">{{ metrics.tool_failure_count }}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-header card-header-soft py-2">Run Health</div>
+      <div class="card-body p-0">
+        <table class="table table-sm ct ct-aligned mb-0">
+          <tr><td>Outcome</td><td class="fw-bold {{ 'text-success' if clean else 'text-danger' }}">{{ termination_short }}</td></tr>
+          <tr><td>Error spans</td><td>{{ metrics.error_span_count }}</td></tr>
+          <tr><td>Tool failures</td><td class="{{ 'text-danger fw-bold' if metrics.tool_failure_count else 'text-success' }}">{{ metrics.tool_failure_count }}</td></tr>
+          <tr>
+            <td>Repeated agents</td>
+            <td class="{{ 'text-danger fw-bold' if metrics.flagged_loops else '' }}">
+              {% if metrics.flagged_loops %}
+                {% for p in metrics.reentry_patterns %}{% if p.flagged %}<span class="drift-tag">{{ p.pattern }}</span> {% endif %}{% endfor %}
+                <span class="text-muted small">(unexpected re-entry)</span>
+              {% elif metrics.loop_reentry_count %}
+                <span class="text-muted small">{{ metrics.loop_reentry_count }} (requested)</span>
+              {% else %}<span class="text-success">none</span>{% endif %}
+            </td>
+          </tr>
+          <tr><td>Busiest agent</td><td>{{ "%.0f"|format(metrics.token_concentration*100) }}% of all tokens</td></tr>
+          <tr>
+            <td>Wall-clock</td>
+            <td>{{ "%.1f"|format(metrics.total_wall_clock_ms/1000) }}s · sum of agent time {{ "%.1f"|format(metrics.sum_of_span_durations/1000) }}s</td>
+          </tr>
+          <tr>
+            <td>Parallelism factor</td>
+            <td>
+              <span class="fw-bold">{{ "%.2f"|format(metrics.parallelism_factor) }}×</span>
+              {% if metrics.parallelism_factor >= 1.5 %}
+                <span class="text-success small">— agents ran in parallel</span>
+              {% elif metrics.parallelism_factor > 1.1 %}
+                <span class="text-warning small">— some overlap</span>
+              {% else %}
+                <span class="text-muted small">— sequential</span>
+              {% endif %}
+            </td>
+          </tr>
+          <tr>
+            <td>Parallel groups (DAG)</td>
+            <td>
+              {% if parallel_groups %}
+                <span class="fw-bold text-success">{{ parallel_groups|length }}</span>
+              {% else %}
+                <span class="text-muted">none</span>
+              {% endif %}
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    const data = {{ graph_data|safe }};
+    const container = document.getElementById('agentGraph');
+    if (!container || !data.nodes.length) return;
+
+    // vis-network renders `title` strings as plain text for safety. To get a
+    // rich HTML tooltip we must pass an actual DOM element.
+    const asEl = (html) => { const d = document.createElement('div'); d.innerHTML = html; return d; };
+    data.nodes.forEach(n => { if (n.title) n.title = asEl(n.title); });
+    data.edges.forEach(e => { if (e.title) e.title = asEl(e.title); });
+
+    const nodes = new vis.DataSet(data.nodes);
+    const edges = new vis.DataSet(data.edges);
+
+    const network = new vis.Network(container, { nodes, edges }, {
+      layout: {
+        hierarchical: {
+          enabled: true, direction: 'LR', sortMethod: 'directed',
+          levelSeparation: 200, nodeSpacing: 110, treeSpacing: 80,
+        }
+      },
+      physics: false,
+      interaction: {
+        hover: true, tooltipDelay: 80, zoomView: true, dragView: true,
+        keyboard: false,
+      },
+      nodes: {
+        shape: 'box',
+        font: { size: 14, face: "'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+                color: '#1a1a2e', multi: 'html',
+                bold: { size: 15, face: "'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif" },
+                ital: { color: '#5a6072', size: 12, face: "'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif" } },
+        margin: 12, shadow: { enabled: true, size: 5, x: 0, y: 2, color: 'rgba(0,0,0,0.12)' },
+        widthConstraint: { minimum: 100 },
+      },
+      edges: {
+        arrows: { to: { enabled: true, scaleFactor: 0.7 } },
+        color: { color: '#b0b6c3', highlight: '#3949ab' },
+        font: { size: 11, color: '#8a90a0', strokeWidth: 3, strokeColor: '#fff', align: 'top' },
+        smooth: { type: 'cubicBezier', forceDirection: 'horizontal', roundness: 0.4 },
+      },
+    });
+    // --- Bounded view: clamp zoom + pan so the graph can't be lost ---
+    let homeScale = 1, homePos = { x: 0, y: 0 };
+    const ZOOM_MIN = 0.5;   // can't shrink past half size
+    const ZOOM_MAX = 2.0;   // can't blow up past 2x
+    const PAN_SLACK = 400;  // px the user can drag past the graph extents
+
+    // Compute the bounding box of all nodes (in network coords) for panning bounds.
+    function getGraphBounds() {
+      const positions = network.getPositions();
+      const ids = Object.keys(positions);
+      if (!ids.length) return null;
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      ids.forEach(id => {
+        const p = positions[id];
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+      });
+      return { minX, maxX, minY, maxY };
+    }
+    let bounds = null;
+
+    network.once('afterDrawing', () => {
+      network.fit({ animation: false });
+      homeScale = network.getScale();
+      homePos   = network.getViewPosition();
+      bounds    = getGraphBounds();
+    });
+
+    // Clamp zoom (vis fires this on every wheel tick / pinch)
+    network.on('zoom', (params) => {
+      if (params.scale < ZOOM_MIN) {
+        network.moveTo({ scale: ZOOM_MIN, animation: false });
+      } else if (params.scale > ZOOM_MAX) {
+        network.moveTo({ scale: ZOOM_MAX, animation: false });
+      }
+    });
+
+    // Clamp pan when user finishes a drag — keep at least one node visible.
+    network.on('dragEnd', () => {
+      if (!bounds) return;
+      const pos = network.getViewPosition();
+      const clampedX = Math.min(Math.max(pos.x, bounds.minX - PAN_SLACK), bounds.maxX + PAN_SLACK);
+      const clampedY = Math.min(Math.max(pos.y, bounds.minY - PAN_SLACK), bounds.maxY + PAN_SLACK);
+      if (clampedX !== pos.x || clampedY !== pos.y) {
+        network.moveTo({ position: { x: clampedX, y: clampedY }, animation: true });
+      }
+    });
+
+    // "Reset view" button — overlay on the canvas, top-right of the container.
+    const resetBtn = document.createElement('button');
+    resetBtn.textContent = '⤺ Reset view';
+    resetBtn.style.cssText = [
+      'position:absolute', 'top:10px', 'right:10px', 'z-index:5',
+      'background:#fff', 'border:1px solid #d6d9e2', 'border-radius:6px',
+      'padding:4px 10px', 'font-size:0.8rem', 'color:#3a3f55',
+      'cursor:pointer', 'box-shadow:0 1px 3px rgba(0,0,0,0.08)',
+    ].join(';');
+    resetBtn.onmouseover = () => resetBtn.style.background = '#f0f4ff';
+    resetBtn.onmouseout  = () => resetBtn.style.background = '#fff';
+    resetBtn.onclick = () => network.fit({ animation: { duration: 300, easingFunction: 'easeInOutCubic' } });
+    // Container must be position:relative for absolute child to anchor correctly.
+    if (getComputedStyle(container).position === 'static') {
+      container.style.position = 'relative';
+    }
+    container.appendChild(resetBtn);
+  })();
+
+  // Initialize Bootstrap popovers (efficiency formula, etc.)
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-bs-toggle="popover"]').forEach(el => {
+      new bootstrap.Popover(el);
+    });
+  });
+</script>
+<style>
+  .popover.eff-popover { max-width: 360px; }
+  .popover.eff-popover .popover-body { padding: 10px 12px; }
+</style>
+{% endblock %}

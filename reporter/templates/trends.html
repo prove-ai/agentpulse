@@ -1,0 +1,840 @@
+{% extends "base.html" %}
+{% block title %}Drift Monitor — AgentPulse{% endblock %}
+
+{% block content %}
+<style>
+  /* --- Page-level --- */
+  .filter-bar { background: white; border-radius: 8px; padding: 12px 16px;
+                box-shadow: 0 1px 4px rgba(0,0,0,.07); }
+  .chip-link  { display: inline-block; background: #eef0f6; color: #3a3f55;
+                border-radius: 14px; padding: 3px 12px; font-size: .78rem;
+                font-weight: 600; text-decoration: none; margin-right: 4px; }
+  .chip-link.active { background: #e1e7fb; color: #1a3d8a; }
+
+  /* --- Soft summary boxes --- */
+  .summary-box { background:white; border-radius:8px; padding:12px;
+                 box-shadow:0 1px 4px rgba(0,0,0,.07); text-align:center;
+                 height:100%; }
+  .summary-box .val { font-size:1.5rem; font-weight:700; line-height:1.1; }
+  .summary-box .lbl { font-size:.68rem; color:#6c757d; text-transform:uppercase;
+                      letter-spacing:.4px; margin-top:3px; }
+  .summary-box .sub { font-size:.7rem; color:#9aa0ab; margin-top:2px; }
+
+  /* --- Agent Health cards --- */
+  .health-card { background:white; border-radius:10px; padding:16px 18px;
+                 box-shadow:0 2px 8px rgba(0,0,0,.07); height:100%;
+                 border-left:5px solid transparent; }
+  .health-card.stable   { border-left-color:#28a745; }
+  .health-card.watch    { border-left-color:#f0ad4e; }
+  .health-card.drifting { border-left-color:#dc3545; }
+  .health-name { font-weight:700; font-size:1.02rem; color:#1a1a2e;
+                 margin-bottom:2px; }
+  .health-sub  { font-size:.72rem; color:#8a90a0; margin-bottom:12px; }
+  .health-eff  { display:flex; align-items:baseline; gap:8px; margin-bottom:10px; }
+  .health-eff .num { font-size:1.7rem; font-weight:700; color:#1a1a2e;
+                     font-variant-numeric: tabular-nums; }
+  .health-eff .unit{ font-size:.72rem; color:#8a90a0; }
+  .health-delta    { font-size:.78rem; font-weight:600; }
+  .health-delta.up   { color:#dc3545; }
+  .health-delta.down { color:#28a745; }
+  .health-delta.flat { color:#8a90a0; }
+  .mini-signals { display:flex; flex-wrap:wrap; gap:5px; margin-top:6px; }
+  .mini-sig { background:#f4f6fa; color:#5a6072; border-radius:10px;
+              padding:2px 8px; font-size:.7rem; font-weight:500; }
+  .mini-sig.drifted { background:#ffe2cc; color:#8a4b00; font-weight:600; }
+  .issue-note { background:#fff8e1; border:1px solid #ffe082; border-radius:6px;
+                padding:7px 10px; font-size:.78rem; color:#6b5a00; margin-top:10px; }
+
+  /* --- Unified handoff card (used by BOTH drift suspects and common) --- */
+  .ho-card { background:white; border-radius:10px; padding:18px 20px;
+             box-shadow:0 2px 8px rgba(0,0,0,.07); height:100%;
+             border-left:5px solid #e6e8ef;
+             display:flex; flex-direction:column; gap:0; }
+  .ho-card.risk-high   { border-left-color:#dc3545; }
+  .ho-card.risk-medium { border-left-color:#f0ad4e; }
+  .ho-card.risk-low    { border-left-color:#28a745; }
+  .ho-card.volume      { border-left-color:#9ab2e8; }   /* common-handoff variant */
+  .ho-card.status-critical { border-left-color:#8a1f1f; }   /* Critical    — dark red */
+  .ho-card.status-high     { border-left-color:#dc3545; }   /* High risk   — red */
+  .ho-card.status-medium   { border-left-color:#e0871a; }   /* Medium risk — orange */
+  .ho-card.status-watch    { border-left-color:#d6b41e; }   /* Watch       — yellow */
+  .ho-card.status-stable   { border-left-color:#28a745; }   /* Stable      — green */
+  .ho-card.status-info     { border-left-color:#c2c7d0; }   /* single-half info card */
+
+  /* Path summary mini-cards */
+  .path-val   { font-size:1.5rem; font-weight:700; color:#1a1a2e; line-height:1.1;
+                margin-top:6px; font-variant-numeric:tabular-nums; }
+  .path-unit  { font-size:.7rem; color:#8a90a0; font-weight:500; }
+  .path-delta { font-size:.8rem; font-weight:600; color:#5a6072; margin-top:2px; }
+  .path-route { font-size:.9rem; font-weight:700; color:#1a1a2e; margin-top:6px;
+                line-height:1.3; word-break:break-word; }
+  .path-route .arrow { color:#8a90a0; margin:0 3px; }
+  /* Full-chain hover popover */
+  .route-hover { position:relative; cursor:help; }
+  .chain-pop { display:none; position:absolute; z-index:60; top:100%; left:0;
+               margin-top:6px; background:#1a1a2e; color:#f0f0ff;
+               border-radius:8px; padding:10px 14px; min-width:160px;
+               box-shadow:0 8px 22px rgba(0,0,0,.28); }
+  .route-hover:hover .chain-pop { display:block; }
+  .chain-pop-title { font-size:.66rem; text-transform:uppercase; letter-spacing:.5px;
+                     color:#9aa0c7; margin-bottom:6px; }
+  .chain-step  { font-size:.84rem; font-weight:600; }
+  .chain-arrow { color:#6b7099; font-size:.7rem; line-height:1; margin:1px 0; }
+
+  /* Concern coloring for agent evidence/impact deltas — by RISK, not direction */
+  .ho-stats td.d.concern-high   { color:#dc3545; }   /* concerning */
+  .ho-stats td.d.concern-medium { color:#e0871a; }   /* potentially concerning */
+  .ho-stats td.d.concern-none   { color:#8a90a0; }   /* not notable */
+
+  /* Header row: agent pair on the left, status pill on the right */
+  .ho-card-head { display:flex; justify-content:space-between;
+                  align-items:flex-start; gap:10px; margin-bottom:12px; }
+  /* Vertical agent stack — each agent on its own line so long names never
+     wrap mid-pair (sender, down-arrow, receiver). Always readable at any zoom. */
+  .ho-pair { display:flex; flex-direction:column; align-items:flex-start;
+             gap:2px; min-width:0; }
+  .ho-pair .agent { display:inline-block; background:#eef0f6; color:#1a1a2e;
+                    border-radius:5px; padding:3px 10px; font-weight:700;
+                    font-size:.9rem; max-width:100%; line-height:1.25;
+                    word-break:break-word; }
+  .ho-pair .arrow-down { color:#adb5bd; font-size:.8rem; line-height:1;
+                         align-self:center; margin:1px 0; }
+  .ho-vol-badge   { display:inline-block; background:#e1e7fb; color:#1a3d8a;
+                    border-radius:10px; padding:2px 9px; font-size:.66rem;
+                    font-weight:600; margin-top:6px; white-space:nowrap; }
+
+  /* Compact common-handoff card */
+  .ho-card.compact { padding:14px 16px; }
+  .compact-stats td { padding:3px 0; }
+  .ho-minor-badge { display:inline-block; border-radius:10px; padding:2px 9px;
+                    font-size:.64rem; font-weight:600; margin-top:6px;
+                    white-space:nowrap; cursor:help; }
+  .ho-minor-badge.minor-high   { background:#fbe7e7; color:#8a1f1f; }
+  .ho-minor-badge.minor-medium { background:#fff4e0; color:#7a4a00; }
+  .ho-minor-badge.minor-low    { background:#eef0f6; color:#5a6072; }
+
+  /* Section blocks with consistent vertical rhythm */
+  .ho-section + .ho-section { margin-top:14px; }
+  .ho-label { font-size:.75rem; color:#8a90a0; margin-bottom:4px;
+              font-weight:600; letter-spacing:0.1px; }
+  .ho-risk-reason { font-size:.7rem; color:#8a90a0; margin-top:4px;
+                    max-width:150px; line-height:1.3; }
+  .ho-rule  { font-weight:600; color:#1a1a2e; font-size:.92rem; }
+  .ho-also  { font-size:.74rem; color:#8a90a0; margin-top:2px; }
+  .ho-text  { font-size:.85rem; color:#3a3f55; line-height:1.45; }
+
+  /* Stat table — same format for drift evidence AND common-handoff stats */
+  .ho-stats { width:100%; font-size:.82rem; font-variant-numeric:tabular-nums;
+              border-collapse:collapse; }
+  .ho-stats td { padding:4px 0; vertical-align:middle; border:none; }
+  .ho-stats td.k   { color:#5a6072; }
+  .ho-stats td.v   { text-align:right; font-weight:600; color:#1a1a2e;
+                     padding-right:12px; white-space:nowrap; }
+  .ho-stats td.d   { text-align:right; font-weight:600; width:64px;
+                     white-space:nowrap; }
+  .ho-stats td.d.up   { color:#dc3545; }
+  .ho-stats td.d.down { color:#28a745; }
+  .ho-stats td.d.flat { color:#8a90a0; }
+  .ho-stats td.d.good { color:#28a745; }   /* good = green regardless of direction */
+  .ho-stats td.d.mid  { color:#f0ad4e; }
+  .ho-stats td.d.bad  { color:#dc3545; }
+
+</style>
+
+<!-- Page header -->
+<div class="d-flex justify-content-between align-items-end mb-3">
+  <div>
+    <h4 class="mb-0">Drift Monitor</h4>
+    <small class="text-muted">
+      See where your multi-agent system is changing, what looks risky, and
+      which agents or handoffs need attention.
+    </small>
+  </div>
+</div>
+
+<!-- Filters -->
+{% macro _qs(days, tt, ver) -%}
+  ?days={{ days }}{% if tt %}&task_type={{ tt }}{% endif %}{% if ver %}&version={{ ver }}{% endif %}
+{%- endmacro %}
+
+<div class="filter-bar mb-3 d-flex flex-wrap gap-3 align-items-center">
+  <div>
+    <strong class="me-2 small text-muted">Window:</strong>
+    {% for d in [7, 30, 90, 365] %}
+      <a class="chip-link {{ 'active' if days==d else '' }}"
+         href="/trends{{ _qs(d, task_type_filter, version_filter) }}">
+        {{ d if d < 365 else 'all' }}{{ 'd' if d < 365 else '' }}
+      </a>
+    {% endfor %}
+  </div>
+  <div>
+    <strong class="me-2 small text-muted">Task type:</strong>
+    <a class="chip-link {{ 'active' if not task_type_filter else '' }}"
+       href="/trends{{ _qs(days, '', version_filter) }}">all</a>
+    {% for tt in task_types %}
+      <a class="chip-link {{ 'active' if task_type_filter==tt else '' }}"
+         href="/trends{{ _qs(days, tt, version_filter) }}">{{ tt }}</a>
+    {% endfor %}
+  </div>
+  <div>
+    <strong class="me-2 small text-muted">Version:</strong>
+    <a class="chip-link {{ 'active' if not version_filter else '' }}"
+       href="/trends{{ _qs(days, task_type_filter, '') }}">all</a>
+    {% if versions_available %}
+      {% for v in versions_available %}
+        <a class="chip-link {{ 'active' if version_filter==v else '' }}"
+           href="/trends{{ _qs(days, task_type_filter, v) }}">v{{ v }}</a>
+      {% endfor %}
+    {% else %}
+      <span class="text-muted small ms-1">(no versions in window)</span>
+    {% endif %}
+  </div>
+</div>
+
+{% if trends.insufficient %}
+<div class="card">
+  <div class="card-body text-center text-muted py-5">
+    Not enough runs in this window — found <strong>{{ trends.runs_count }}</strong>,
+    need at least <strong>{{ trends.min_required }}</strong> to compute trends.<br>
+    <small>Widen the time window or capture more runs.</small>
+  </div>
+</div>
+{% else %}
+
+<!-- Summary strip -->
+{% set hs = trends.health_summary %}
+<div class="row g-2 mb-3">
+  <div class="col-md-3 col-6">
+    <div class="summary-box">
+      <div class="val">{{ hs.runs_analyzed }}</div>
+      <div class="lbl">Runs analyzed</div>
+      <div class="sub">{{ trends.n_early }} earlier · {{ trends.n_recent }} recent</div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="summary-box">
+      <div class="val">{{ hs.drift_total }}</div>
+      <div class="lbl">Drift suspects</div>
+      <div class="sub">{{ hs.drift_handoffs }} handoffs · {{ hs.drift_agents }} agent{{ '' if hs.drift_agents == 1 else 's' }}</div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="summary-box">
+      <div class="val {{ 'text-danger' if hs.cost_pct > 0 else ('text-success' if hs.cost_pct < 0 else '') }}">{{ "%+.0f"|format(hs.cost_pct) }}%</div>
+      <div class="lbl">Cost per run</div>
+      <div class="sub">Recent vs earlier</div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="summary-box">
+      <div class="val {{ 'text-danger' if hs.wall_pct > 0 else ('text-success' if hs.wall_pct < 0 else '') }}">{{ "%+.0f"|format(hs.wall_pct) }}%</div>
+      <div class="lbl">Wall-clock per run</div>
+      <div class="sub">Recent vs earlier</div>
+    </div>
+  </div>
+</div>
+
+<!-- Versions — manual snapshots, horizontal comparison -->
+{% if trends.versions and trends.versions|length %}
+<div class="mb-2 d-flex justify-content-between align-items-center">
+  <div>
+    <h5 class="mb-0">Versions</h5>
+    <span class="small text-secondary">Manual snapshots of your settings. Compare iterations side by side.</span>
+  </div>
+  <button class="btn btn-sm btn-primary" onclick="obsSnapshotVersion()">
+    Save current as Version {{ (trends.versions|map(attribute='num')|max) + 1 }}
+  </button>
+</div>
+<div class="table-responsive mb-4">
+  <table class="table table-sm align-middle">
+    <thead class="table-light"><tr>
+      <th>Version</th><th>Runs</th><th>Success</th><th>Avg cost</th><th>Avg tokens</th><th>Changed from previous</th>
+    </tr></thead>
+    <tbody>
+      {% for v in trends.versions %}
+      <tr>
+        <td><strong>{{ v.label }}</strong></td>
+        <td>{{ v.runs }}</td>
+        <td>{{ "%.0f"|format(v.success_rate) }}%</td>
+        <td>${{ "%.4f"|format(v.avg_cost) }}</td>
+        <td>{{ "{:,}".format(v.avg_tokens) }}</td>
+        <td style="font-size:.8rem;">
+          {% if v.diff %}
+            {% for d in v.diff %}
+            <div><span class="text-capitalize">{{ d.dimension }}</span>{% if d.scope != 'workflow' %} · {{ d.scope }}{% endif %}:
+              <code class="text-secondary">{{ d.old }}</code> → <code>{{ d.new }}</code></div>
+            {% endfor %}
+          {% elif not loop.first %}<span class="text-muted">no config change</span>
+          {% else %}<span class="text-muted">baseline</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<script>
+function obsSnapshotVersion(){
+  var label = prompt("Label for this version (optional):") || "";
+  var db = new URLSearchParams(location.search).get('db');
+  fetch("/version/snapshot" + (db ? ("?db=" + encodeURIComponent(db)) : ""),
+    {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({label:label})})
+    .then(function(r){return r.json();})
+    .then(function(d){ if(d.ok){ alert("Saved as Version " + d.version); location.reload(); } else { alert("Snapshot failed"); }});
+}
+</script>
+{% endif %}
+
+<!-- Top 3 Drift Suspects -->
+{% if trends.drift_suspects %}
+<div class="mb-2">
+  <h5 class="mb-0">Top handoff drift suspects</h5>
+  <span class="small text-secondary">
+    Handoffs (agent → agent) whose behaviour shifted most when comparing the latest runs to earlier ones in this window.
+  </span>
+</div>
+<div class="row g-3 mb-4">
+  {% for s in trends.drift_suspects %}
+  <div class="col-lg-4 col-md-6">
+    <div class="ho-card risk-{{ s.risk }}">
+      <div class="ho-card-head">
+        <div class="ho-pair">
+          <span class="agent">{{ s.from }}</span>
+          <span class="arrow-down">↓</span>
+          <span class="agent">{{ s.to }}</span>
+        </div>
+        <div class="text-end" style="flex-shrink:0;">
+          <span class="pill pill-{{ 'drift' if s.risk=='high' else ('potential' if s.risk=='medium' else 'ok') }}">
+            Risk: {{ s.risk|capitalize }}
+          </span>
+          {% if s.risk_reason %}
+          <div class="ho-risk-reason">{{ s.risk_reason }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="ho-section">
+        <div class="ho-label">Drift type</div>
+        <div class="ho-rule">{{ s.rule_title }}{% if s.also_high_volume %} + previously high volume{% endif %}</div>
+        {% if s.also_titles %}
+        <div class="ho-also">also detected: {{ s.also_titles|join(', ') }}</div>
+        {% endif %}
+      </div>
+
+      {% if s.insight %}
+      <div class="ho-section">
+        <div class="ho-label">Insight</div>
+        <div class="ho-text">{{ s.insight }}</div>
+      </div>
+      {% endif %}
+
+      {% if s.replacement %}
+      <div class="ho-section">
+        <div class="ho-label">Routing impact</div>
+        <div class="ho-text">{{ s.replacement }}</div>
+      </div>
+      {% endif %}
+
+      {% if s.evidence %}
+      <div class="ho-section">
+        <div class="ho-label">Evidence</div>
+        <table class="ho-stats">
+          {% for row in s.evidence %}
+          <tr>
+            <td class="k">{{ row.label }}</td>
+            <td class="v">{{ row.recent }}</td>
+            {% if row.pct is none %}
+              <td class="d flat">{{ row.note or '—' }}</td>
+            {% else %}
+              {% set cls = 'flat' if row.pct == 0 else ('up' if row.pct > 0 else 'down') %}
+              <td class="d {{ cls }}">{{ "%+.0f"|format(row.pct) }}%</td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </table>
+      </div>
+      {% endif %}
+
+      {% if s.downstream %}
+      <div class="ho-section">
+        <div class="ho-label">Downstream impact</div>
+        <table class="ho-stats">
+          {% for row in s.downstream %}
+          <tr>
+            <td class="k">{{ row.label }}</td>
+            <td class="v">{{ row.recent }}</td>
+            {% if row.pct is none %}
+              <td class="d flat">{{ row.note or '—' }}</td>
+            {% else %}
+              {% set cls = 'flat' if row.pct == 0 else ('up' if row.pct > 0 else 'down') %}
+              <td class="d {{ cls }}">{{ "%+.0f"|format(row.pct) }}%</td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </table>
+      </div>
+      {% endif %}
+
+      {% if s.observed_value %}
+      <div class="ho-section">
+        <div class="ho-label">{{ s.observed_label }}</div>
+        <div class="ho-text">{{ s.observed_value }}</div>
+      </div>
+      {% elif s.attribution %}
+      <div class="ho-section">
+        <div class="ho-label">{{ s.observed_label or 'Appeared in' }}</div>
+        <div class="ho-text">{{ s.attribution }}</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Common Handoff Health — COMPACT cards (volume-ranked, suspects excluded) -->
+{# "Other" only makes sense when a flagged-suspects section precedes this one. #}
+<div class="mb-2">
+  <h5 class="mb-0">{{ 'Other common handoffs' if trends.drift_suspects else 'Common handoffs' }}</h5>
+  <span class="small text-secondary">
+    {% if trends.drift_suspects %}
+    The most frequent routes in this window, by volume, with the same metrics as the suspects above. A badge appears if a route also drifted but wasn't a top suspect.
+    {% else %}
+    The most frequent routes in this window, by volume. A badge appears if a route drifted.
+    {% endif %}
+  </span>
+</div>
+<div class="row g-3 mb-4">
+  {% if trends.top_handoffs.pairs %}
+    {% for p in trends.top_handoffs.pairs %}
+    <div class="col-lg-4 col-md-6">
+      <div class="ho-card volume">
+        <div class="ho-card-head">
+          <div class="ho-pair">
+            <span class="agent">{{ p.from }}</span>
+            <span class="arrow-down">↓</span>
+            <span class="agent">{{ p.to }}</span>
+            {% if p.minor_drift %}
+            <span class="ho-minor-badge minor-{{ p.minor_drift.risk }}"
+                  title="{{ p.minor_drift.rule_title }}">minor drift</span>
+            {% endif %}
+          </div>
+          <span class="pill pill-{{ 'ok' if p.success_rate >= 90 else ('potential' if p.success_rate >= 70 else 'drift') }}">
+            {{ p.success_rate }}%
+          </span>
+        </div>
+
+        <div class="ho-section">
+          <div class="ho-label">Volume</div>
+          <div class="ho-text">Fires {{ p.count }} times ({{ p.pct }}% of all handoffs)</div>
+        </div>
+
+        {% if p.evidence %}
+        <div class="ho-section">
+          <div class="ho-label">Evidence</div>
+          <table class="ho-stats">
+            {% for row in p.evidence %}
+            <tr>
+              <td class="k">{{ row.label }}</td>
+              <td class="v">{{ row.recent }}</td>
+              {% if row.pct is none %}
+                <td class="d flat">{{ row.note or '—' }}</td>
+              {% else %}
+                {% set cls = 'flat' if row.pct == 0 else ('up' if row.pct > 0 else 'down') %}
+                <td class="d {{ cls }}">{{ "%+.0f"|format(row.pct) }}%</td>
+              {% endif %}
+            </tr>
+            {% endfor %}
+          </table>
+        </div>
+        {% endif %}
+
+        {% if p.downstream %}
+        <div class="ho-section">
+          <div class="ho-label">Downstream impact</div>
+          <table class="ho-stats">
+            {% for row in p.downstream %}
+            <tr>
+              <td class="k">{{ row.label }}</td>
+              <td class="v">{{ row.recent }}</td>
+              {% if row.pct is none %}
+                <td class="d flat">{{ row.note or '—' }}</td>
+              {% else %}
+                {% set cls = 'flat' if row.pct == 0 else ('up' if row.pct > 0 else 'down') %}
+                <td class="d {{ cls }}">{{ "%+.0f"|format(row.pct) }}%</td>
+              {% endif %}
+            </tr>
+            {% endfor %}
+          </table>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="col-12">
+      <div class="text-muted small text-center py-4">
+        No handoffs captured in this window — agents may run independently without explicit transitions.
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+<!-- Agent drift summary cards -->
+{% if trends.agent_drift and (trends.agent_drift.drift or trends.agent_drift.info) %}
+<div class="mb-2">
+  <h5 class="mb-0">Agent drift summary</h5>
+  <span class="small text-secondary">
+    Per-agent behaviour change, recent runs vs earlier runs. Values are colored by risk, not by direction.
+  </span>
+</div>
+<div class="row g-3 mb-4">
+  {% for a in trends.agent_drift.drift %}
+  <div class="col-lg-4 col-md-6">
+    <div class="ho-card status-{{ a.status }}">
+      <div class="ho-card-head">
+        <div>
+          <div class="health-name">{{ a.agent }}</div>
+          <div class="health-sub">seen in {{ a.runs_seen }} run(s)</div>
+        </div>
+        {% set status_pill = {'critical':'drift','high':'drift','medium':'potential','watch':'watch','stable':'ok'} %}
+        {% set status_text = {'critical':'Critical','high':'High risk','medium':'Medium risk','watch':'Watch','stable':'Stable'} %}
+        <div class="text-end">
+          <span class="pill pill-{{ status_pill[a.status] }}">{{ status_text[a.status] }}</span>
+          {% if a.confidence %}<div class="health-sub">{{ a.confidence }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="ho-section">
+        <div class="ho-label">Insight</div>
+        <div class="ho-text">{{ a.insight }}</div>
+      </div>
+
+      <div class="ho-section">
+        <div class="ho-label">Evidence</div>
+        <table class="ho-stats">
+          {% for row in a.evidence %}
+          <tr>
+            <td class="k">{{ row.label }}</td>
+            <td class="v">{{ row.recent }}</td>
+            <td class="d {{ 'concern-high' if row.abnormal else 'concern-none' }}">{{ "%+.0f"|format(row.pct) }}%</td>
+          </tr>
+          {% endfor %}
+        </table>
+      </div>
+
+      <div class="ho-section">
+        <div class="ho-label">Impact</div>
+        <table class="ho-stats">
+          {% for row in a.impact %}
+          <tr>
+            <td class="k">{{ row.label }}</td>
+            <td class="v">{{ row.recent }}</td>
+            <td class="d {{ 'concern-high' if row.abnormal else 'concern-none' }}">{{ "%+.0f"|format(row.pct) }}%</td>
+          </tr>
+          {% endfor %}
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+  {# Lightweight info cards for agents that only appear in one half #}
+  {% for a in trends.agent_drift.info %}
+  <div class="col-lg-4 col-md-6">
+    <div class="ho-card status-info">
+      <div class="ho-card-head">
+        <div>
+          <div class="health-name">{{ a.agent }}</div>
+          <div class="health-sub">seen in {{ a.runs_seen }} run(s)</div>
+        </div>
+        <span class="pill pill-{{ 'potential' if a.info_type=='retired' else 'ok' }}">
+          {{ 'Newly observed' if a.info_type=='new' else 'Earlier only' }}
+        </span>
+      </div>
+
+      <div class="ho-section">
+        <div class="ho-text text-muted">{{ a.note }}</div>
+      </div>
+
+      <div class="ho-section">
+        <div class="ho-label">{{ 'Recent snapshot' if a.info_type=='new' else 'Earlier snapshot' }}</div>
+        <table class="ho-stats">
+          {% for row in a.snapshot %}
+          <tr>
+            <td class="k">{{ row.label }}</td>
+            <td class="v">{{ row.value }}</td>
+            <td class="d concern-none">—</td>
+          </tr>
+          {% endfor %}
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Path summary -->
+{% if trends.path_summary %}
+{% set ps = trends.path_summary %}
+<div class="mb-2">
+  <h5 class="mb-0">Path summary</h5>
+  <span class="small text-secondary">
+    How the overall agent paths through the system are changing, recent runs vs earlier runs.
+  </span>
+</div>
+<div class="row g-3 mb-4">
+  <div class="col-md-3 col-6">
+    <div class="ho-card volume">
+      <div class="ho-label">Avg path length</div>
+      <div class="path-val">{{ ps.avg_path_length.value }} <span class="path-unit">agents</span></div>
+      <div class="path-delta">{{ "%+.0f"|format(ps.avg_path_length.pct) }}%</div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="ho-card volume">
+      <div class="ho-label">Unique paths</div>
+      <div class="path-val">{{ ps.unique_paths.value }}</div>
+      <div class="path-delta">{{ "%+.0f"|format(ps.unique_paths.pct) }}%</div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="ho-card volume">
+      <div class="ho-label">Re-invocation loops</div>
+      <div class="path-val">{{ ps.reinvocation_loops.value }} <span class="path-unit">runs</span></div>
+      <div class="path-delta">{{ "%+.0f"|format(ps.reinvocation_loops.pct) }}%</div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="ho-card volume">
+      <div class="ho-label">Most changed route</div>
+      {% if ps.most_changed_route %}
+      {% set mc = ps.most_changed_route %}
+      <div data-tip="{{ mc.chain|join(' | ') }}">
+        <div class="path-route">{{ mc.from }} <span class="arrow">→</span> {{ mc.to }}</div>
+        <div class="path-delta">
+          {{ mc.agents }} agents · {{ mc.handoffs }} handoffs{% if mc.cost_pct is not none %} · {{ "%+.0f"|format(mc.cost_pct) }}% cost{% endif %}
+        </div>
+      </div>
+      {% else %}
+      <div class="path-route text-muted">—</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Parallel group health -->
+{% if trends.parallel_health %}
+{% set ph = trends.parallel_health %}
+<div class="mb-2">
+  <h5 class="mb-0">Parallel group health</h5>
+  <span class="small text-secondary">
+    Fan-out behaviour of the primary parallel group, recent runs vs earlier runs.
+  </span>
+</div>
+{% if ph.available %}
+<div class="row g-3 mb-4">
+  {# Bottleneck branch — slowest branch gating the join. Up = worse. #}
+  <div class="col-md-4 col-12">
+    <div class="ho-card volume">
+      <div class="ho-label">Bottleneck branch</div>
+      <div class="path-val">
+        {{ "%.1f"|format(ph.bottleneck_ms.early/1000) }}s
+        <span class="arrow">→</span>
+        {{ "%.1f"|format(ph.bottleneck_ms.recent/1000) }}s
+      </div>
+      <div class="path-delta" style="color:{{ '#dc3545' if ph.bottleneck_ms.pct > 0 else ('#198754' if ph.bottleneck_ms.pct < 0 else '#6c757d') }};">
+        {{ "%+.0f"|format(ph.bottleneck_ms.pct) }}%
+      </div>
+    </div>
+  </div>
+  {# Join wait — how long the fastest branch idled. Up = worse. #}
+  <div class="col-md-4 col-12">
+    <div class="ho-card volume">
+      <div class="ho-label">Join wait</div>
+      <div class="path-val">
+        {{ "%.1f"|format(ph.join_wait_ms.early/1000) }}s
+        <span class="arrow">→</span>
+        {{ "%.1f"|format(ph.join_wait_ms.recent/1000) }}s
+      </div>
+      <div class="path-delta" style="color:{{ '#dc3545' if ph.join_wait_ms.pct > 0 else ('#198754' if ph.join_wait_ms.pct < 0 else '#6c757d') }};">
+        {{ "%+.0f"|format(ph.join_wait_ms.pct) }}%
+      </div>
+    </div>
+  </div>
+  {# Efficiency — balance of the fan-out. Down = worse. #}
+  <div class="col-md-4 col-12">
+    <div class="ho-card volume">
+      <div class="ho-label">Efficiency</div>
+      <div class="path-val">
+        {{ "%.0f"|format(ph.efficiency.early*100) }}%
+        <span class="arrow">→</span>
+        {{ "%.0f"|format(ph.efficiency.recent*100) }}%
+      </div>
+      <div class="path-delta" style="color:{{ '#dc3545' if ph.efficiency.pct < 0 else ('#198754' if ph.efficiency.pct > 0 else '#6c757d') }};">
+        {{ "%+.0f"|format(ph.efficiency.pct) }}%
+      </div>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="small text-muted mb-4">
+  Not enough runs with a parallel group yet
+  ({{ ph.n_early }} early · {{ ph.n_recent }} recent) — need at least one in each half.
+</div>
+{% endif %}
+{% endif %}
+
+<!-- Potentially related changes (clues, not cause) -->
+{% if trends.related_changes and trends.related_changes.has_config %}
+{% set rc = trends.related_changes %}
+<div class="mb-2">
+  <h5 class="mb-0">Potentially related changes</h5>
+  <span class="small text-secondary">
+    Config changes in the {{ rc.lookback_runs }} runs or {{ rc.lookback_hours }}h before the recent window —
+    temporal correlation only, <strong>not a confirmed cause</strong>.
+  </span>
+</div>
+<div class="card mb-4"><div class="card-body" style="font-size:.85rem;">
+  {% if rc.changed %}
+  <div class="mb-1"><strong>Changed shortly before the drift:</strong></div>
+  <ul class="mb-3">
+    {% for c in rc.changed %}
+    <li>
+      <span class="badge bg-warning text-dark text-capitalize">{{ c.dimension }}</span>
+      {% if c.scopes %} — {{ c.scopes|join(', ') }}{% endif %}
+      <span class="text-secondary">(nearest {{ c.events|map(attribute='runs_before')|min }} run(s) before)</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="text-muted mb-2">No config changes detected in the lookback window.</div>
+  {% endif %}
+  {% if rc.unchanged %}
+  <div><strong>Stayed the same:</strong>
+    {% for d in rc.unchanged %}<span class="badge bg-light text-secondary text-capitalize">{{ d }}</span> {% endfor %}
+  </div>
+  {% endif %}
+  <div class="text-muted mt-2">These are clues to investigate — the tool does not assert any of them caused the drift.</div>
+</div></div>
+{% endif %}
+
+<!-- Cost + wall-clock trends, side by side -->
+<div class="row g-3 mb-3">
+  <div class="col-lg-6">
+    <div class="mb-2">
+      <h5 class="mb-0">Cost per run trend</h5>
+      <span class="small text-secondary">
+        One point per run. Use with the cards above to explain cost changes.
+      </span>
+    </div>
+    <div class="card">
+      <div class="card-body"><canvas id="costChart" height="160"></canvas></div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="mb-2">
+      <h5 class="mb-0">Wall clock per run trend</h5>
+      <span class="small text-secondary">
+        End-to-end run time. Pairs with latency drift on the cards above.
+      </span>
+    </div>
+    <div class="card">
+      <div class="card-body"><canvas id="wallChart" height="160"></canvas></div>
+    </div>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script>
+  (function () {
+    const series = {{ series|safe }};
+    if (!series.length) return;
+    // X-axis: simple run index 1..N — easier to read than dense timestamps.
+    const labels = series.map((s, i) => '#' + (i + 1));
+    const costs  = series.map(s => s.cost);
+
+    // Shared tooltip footer (version + id) for both charts.
+    const afterLabel = (ctx) => [
+      'version v' + series[ctx.dataIndex].version,
+      'id ' + series[ctx.dataIndex].run_id,
+    ];
+    const titleCb = (items) => 'Run ' + items[0].label + ' · ' + series[items[0].dataIndex].ts;
+
+    new Chart(document.getElementById('costChart'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          data: costs,
+          borderColor: '#198754',
+          backgroundColor: 'rgba(25,135,84,.1)',
+          fill: true, tension: .3,
+          pointRadius: 4, pointHoverRadius: 6,
+          pointBackgroundColor: '#198754',
+        }],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: titleCb,
+              label: (ctx) => '$' + Number(ctx.raw).toFixed(4),
+              afterLabel,
+            },
+          },
+        },
+        scales: {
+          y: { beginAtZero: true, title: { display: true, text: 'USD' },
+               ticks: { callback: (v) => '$' + Number(v).toFixed(4) } },
+          x: { title: { display: true, text: 'Run (oldest → newest)' },
+               ticks: { font: { size: 11 } } },
+        },
+      },
+    });
+
+    // Wall-clock chart
+    const walls = series.map(s => s.wall_s);
+    new Chart(document.getElementById('wallChart'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          data: walls,
+          borderColor: '#3949ab',
+          backgroundColor: 'rgba(57,73,171,.1)',
+          fill: true, tension: .3,
+          pointRadius: 4, pointHoverRadius: 6,
+          pointBackgroundColor: '#3949ab',
+        }],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: titleCb,
+              label: (ctx) => Number(ctx.raw).toFixed(1) + 's',
+              afterLabel,
+            },
+          },
+        },
+        scales: {
+          y: { beginAtZero: true, title: { display: true, text: 'seconds' },
+               ticks: { callback: (v) => Number(v).toFixed(0) + 's' } },
+          x: { title: { display: true, text: 'Run (oldest → newest)' },
+               ticks: { font: { size: 11 } } },
+        },
+      },
+    });
+  })();
+</script>
+{% endblock %}

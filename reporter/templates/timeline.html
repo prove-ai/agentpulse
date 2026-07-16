@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Event Timeline — AgentPulse{% endblock %}
+{% block content %}
+<style>
+  .tl-item { display:flex; gap:12px; padding:6px 0; border-bottom:1px solid #eef0f6; }
+  .tl-run  { min-width:54px; font-variant-numeric:tabular-nums; color:#6c757d; font-size:.8rem; }
+  .tl-body { font-size:.85rem; }
+  .tl-dim  { font-weight:600; text-transform:capitalize; }
+  .tl-scope{ color:#3949ab; }
+  .tl-old  { color:#8a90a0; } .tl-new { color:#1a1a2e; font-weight:600; }
+</style>
+
+<div class="mb-3">
+  <h4 class="mb-0">Event Timeline</h4>
+  <small class="text-muted">
+    Every config change as a point on the line — hover for detail. Versions are the big dots.
+    {% if anchor is not none %}<span class="text-warning"> Zoomed to the drift around run #{{ anchor }}.</span>
+    <a href="/timeline?days={{ days }}" class="ms-1">show full timeline</a>{% endif %}
+  </small>
+</div>
+
+{% if not has_config %}
+<div class="card"><div class="card-body text-center text-muted py-5">
+  No config was captured for these runs, so there's nothing to track yet.<br>
+  <small>New runs capture per-agent config automatically; imported runs can include a <code>config</code> block.</small>
+</div></div>
+{% else %}
+
+<!-- The timeline line-graph -->
+<div class="card mb-3"><div class="card-body">
+  <canvas id="tlChart" height="90"></canvas>
+</div></div>
+
+{% if scoped %}
+<div class="card mb-3" style="border-left:4px solid #fd7e14;">
+  <div class="card-body">
+    <div class="mb-1"><strong>Potentially related to the drift on
+      <span class="tl-scope">{{ scoped.scope }}</span></strong>
+      {% if scoped.anchor is not none %}<span class="text-muted small">(started ~run #{{ scoped.anchor }})</span>{% endif %}
+    </div>
+    <div class="text-muted small mb-2">
+      Changes in the 20 runs before the drift that touch the same workflow area —
+      worth reviewing, <strong>not a confirmed cause</strong>.
+    </div>
+    {% for e in scoped.events %}
+    <div class="tl-item"><div class="tl-run">run #{{ e.run_index }}</div>
+      <div class="tl-body"><span class="tl-dim">{{ e.dimension }}</span>
+        {% if e.scope != 'workflow' %}· <span class="tl-scope">{{ e.scope }}</span>{% endif %} —
+        <span class="tl-old">{{ e.old }}</span> → <span class="tl-new">{{ e.new }}</span></div>
+    </div>
+    {% else %}<div class="text-muted small">No changes in that window touched this area.</div>{% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<details class="mb-4">
+  <summary class="text-secondary small" style="cursor:pointer;">Full change log ({{ events|length }} events)</summary>
+  <div class="card mt-2"><div class="card-body">
+    {% for e in events %}
+    <div class="tl-item"><div class="tl-run">run #{{ e.run_index }}</div>
+      <div class="tl-body"><span class="tl-dim">{{ e.dimension }}</span>
+        {% if e.scope != 'workflow' %}· <span class="tl-scope">{{ e.scope }}</span>{% endif %} —
+        <span class="tl-old">{{ e.old }}</span> → <span class="tl-new">{{ e.new }}</span>
+        <span class="text-muted ms-1" style="font-size:.72rem;">{{ e.timestamp|et if e.timestamp else '' }}</span></div>
+    </div>
+    {% else %}<div class="text-muted small">No config changes across these runs.</div>{% endfor %}
+  </div></div>
+</details>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script>
+  const PTS = {{ points_json|safe }};
+  const BIG = {{ big_json|safe }};
+  const X_MIN = {{ x_min if x_min is not none else 'null' }};
+  const X_MAX = {{ x_max if x_max is not none else 'null' }};
+  const ANCHOR = {{ anchor if anchor is not none else 'null' }};
+
+  const cv = document.getElementById('tlChart');
+  if (cv && (PTS.length || BIG.length)) {
+    const COLOR = {prompt:'#7048e8', model:'#1c7ed6', tools:'#2f9e44', params:'#e8a020', workflow:'#e8590c'};
+    const maxX = Math.max(0, ...PTS.map(p=>p.x), ...BIG.map(b=>b.x));
+
+    // Always-on labels for the big (version) events.
+    const biglabels = {
+      id:'biglabels',
+      afterDatasetsDraw(chart){
+        const x=chart.scales.x, ctx=chart.ctx, y=chart.scales.y;
+        BIG.forEach(b=>{
+          const px=x.getPixelForValue(b.x); if(px<chart.chartArea.left||px>chart.chartArea.right) return;
+          const py=y.getPixelForValue(0);
+          ctx.save(); ctx.fillStyle='#495057'; ctx.font='bold 10px sans-serif'; ctx.textAlign='center';
+          ctx.fillText(b.label, px, py-12); ctx.restore();
+        });
+      }
+    };
+
+    new Chart(cv, {
+      type:'scatter',
+      data:{ datasets:[
+        { data:[{x:0,y:0},{x:maxX,y:0}], showLine:true, borderColor:'#ced4da', borderWidth:2, pointRadius:0 },
+        { label:'changes', data:PTS.map(p=>({x:p.x,y:0})),
+          pointRadius: PTS.map(p=>p.big?5:3), pointHoverRadius:6,
+          pointBackgroundColor: PTS.map(p=>COLOR[p.dimension]||'#868e96'),
+          pointBorderColor:'#fff', pointBorderWidth:1 },
+        { label:'versions', data:BIG.map(b=>({x:b.x,y:0})),
+          pointRadius:6, pointStyle:'rectRot',
+          pointBackgroundColor:'#212529', pointBorderColor:'#fff', pointBorderWidth:1 },
+      ]},
+      options:{
+        plugins:{
+          legend:{display:false},
+          biglabels:{},
+          tooltip:{ callbacks:{
+            label:(it)=>{
+              if (it.datasetIndex===1){ const p=PTS[it.dataIndex];
+                return [`${p.dimension}${p.scope!=='workflow'?' · '+p.scope:''}`,
+                        `${p.old} → ${p.new}`, `run #${p.x} · ${(p.ts||'').slice(0,16).replace('T',' ')}`]; }
+              if (it.datasetIndex===2){ const b=BIG[it.dataIndex]; return `${b.detail} (run #${b.x})`; }
+              return ''; } } },
+        },
+        scales:{
+          x:{type:'linear', min:X_MIN, max:X_MAX, title:{display:true,text:'run #'}, ticks:{precision:0}},
+          y:{display:false, min:-1, max:1},
+        }
+      },
+      plugins:[biglabels],
+    });
+  }
+</script>
+{% endblock %}

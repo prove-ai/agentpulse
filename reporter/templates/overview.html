@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Overview — AgentPulse{% endblock %}
+{% block content %}
+<style>
+  .ov-head { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+  .ov-title { font-size:1.5rem; font-weight:700; color:#1a1a2e; }
+  .ov-win { color:#8a90a0; font-size:.85rem; }
+  .ov-section { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:#99a1b3; margin:26px 0 12px; }
+
+  /* KPI tiles */
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:14px; margin-top:16px; }
+  .kpi { background:#fff; border:1px solid #eef0f5; border-radius:12px; padding:16px 18px; }
+  .kpi .v { font-size:1.7rem; font-weight:700; line-height:1.05; color:#1a1a2e; }
+  .kpi .l { font-size:.74rem; color:#8a90a0; text-transform:uppercase; letter-spacing:.4px; margin-top:5px; }
+  .kpi .v.warn { color:#e0871a; } .kpi .v.bad { color:#dc3545; } .kpi .v.good { color:#1e6b3a; }
+
+  /* Navigation cards */
+  .nav-cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(230px,1fr)); gap:16px; }
+  .nav-card { display:block; background:#fff; border:1px solid #e6e8ef; border-radius:12px; padding:18px 20px;
+              text-decoration:none; color:#1a1a2e; box-shadow:0 2px 8px rgba(0,0,0,.05);
+              transition:box-shadow .15s, border-color .15s, transform .12s; }
+  .nav-card:hover { box-shadow:0 8px 20px rgba(0,0,0,.10); border-color:#cdd2e0; transform:translateY(-2px); }
+  .nav-card .nc-top { display:flex; align-items:center; gap:10px; margin-bottom:9px; }
+  .nav-card .nc-ico { display:flex; color:#3949ab; }
+  .nav-card .nc-ico svg { width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+  .nav-card .nc-title { font-weight:700; font-size:1.02rem; }
+  .nav-card .nc-desc { font-size:.84rem; color:#6c757d; }
+  .nav-card .nc-stat { margin-top:10px; font-size:.8rem; font-weight:600; color:#3949ab; }
+  .nav-card .nc-stat .bad { color:#dc3545; }
+
+  /* Top signals */
+  .sig { display:flex; align-items:center; gap:12px; background:#fff; border:1px solid #eef0f5;
+         border-radius:10px; padding:11px 14px; margin-bottom:9px; text-decoration:none; color:inherit; }
+  .sig:hover { background:#f7f8fc; }
+  .sig-name { font-weight:700; }
+  .sig-metrics { margin-left:auto; font-size:.8rem; color:#6c757d; }
+  .sig-type { font-size:.7rem; font-weight:600; padding:2px 9px; border-radius:10px; background:#eef0f6; color:#3a3f55; }
+  .sig-type.r-High{ background:#fdecec; color:#b42318; } .sig-type.r-Medium{ background:#fcefe0; color:#9a5b12; } .sig-type.r-Watch{ background:#eef1f6; color:#5a6072; }
+
+  /* Versions */
+  .ver-panel { background:#fff; border:1px solid #eef0f5; border-radius:12px; overflow:hidden; }
+  .ver-panel-h { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid #f0f1f5; }
+  .ver-row2 { display:grid; grid-template-columns:1fr 64px 74px 96px 120px; align-items:center; gap:0 20px;
+              padding:13px 18px; border-bottom:1px solid #f4f5f9; }
+  .ver-row2:last-child { border-bottom:none; }
+  .ver-left { display:flex; align-items:center; gap:13px; min-width:0; }
+  .ver-dot { width:10px; height:10px; border-radius:50%; background:#ced4da; flex-shrink:0; }
+  .ver-row2.is-base .ver-dot { background:#3949ab; }
+  .ver-id { font-weight:700; min-width:30px; }
+  .ver-meta { color:#8a90a0; font-size:.8rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ver-stat { text-align:right; } .ver-stat .n { font-weight:700; } .ver-stat .k { font-size:.66rem; color:#9aa0b0; text-transform:uppercase; letter-spacing:.4px; }
+  .ver-action { text-align:right; }
+  .base-badge { background:#e8eaf6; color:#3949ab; font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.4px; border-radius:6px; padding:3px 9px; }
+  .base-btn { border:1px solid #cdd2e0; background:#fff; color:#3a3f55; border-radius:7px; font-size:.74rem; font-weight:600; padding:5px 11px; cursor:pointer; white-space:nowrap; }
+  .base-btn:hover { border-color:#3949ab; color:#3949ab; }
+</style>
+
+<div class="ov-head">
+  <div>
+    <div class="ov-title">{{ current_db }}</div>
+    <div class="ov-win">Last 30 days · {{ range_display }}</div>
+  </div>
+  {% if high_count %}<span class="badge-drift">{{ high_count }} Critical finding{{ '' if high_count==1 else 's' }}</span>
+  {% elif finding_count %}<span class="badge-warn">{{ finding_count }} Warning finding{{ '' if finding_count==1 else 's' }}</span>
+  {% else %}<span class="badge-ok">Healthy</span>{% endif %}
+</div>
+
+<!-- KPI strip -->
+<div class="kpis">
+  <div class="kpi"><div class="v">{{ run_count }}</div><div class="l">Runs (30d)</div></div>
+  <div class="kpi"><div class="v {{ 'good' if success_rate>=95 else 'warn' if success_rate>=80 else 'bad' }}">{{ success_rate }}%</div><div class="l">Success rate</div></div>
+  <div class="kpi"><div class="v {{ 'bad' if high_count else 'warn' if finding_count else 'good' }}">{{ finding_count }}</div><div class="l">Drift signals</div></div>
+  <div class="kpi"><div class="v">${{ '%.4f'|format(avg_cost) }}</div><div class="l">Avg cost / run</div></div>
+</div>
+
+<!-- Navigation -->
+<div class="ov-section">Explore this project</div>
+<div class="nav-cards">
+  <a class="nav-card" href="/switch-db/{{ current_db }}?next=index">
+    <div class="nc-top"><span class="nc-ico"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="9" x2="9" y2="20"/></svg></span><span class="nc-title">Run History</span></div>
+    <div class="nc-desc">Browse individual runs, statuses, and per-run insights.</div>
+    <div class="nc-stat">{{ run_count }} runs →</div>
+  </a>
+  <a class="nav-card" href="/switch-db/{{ current_db }}?next=drift2">
+    <div class="nc-top"><span class="nc-ico"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg></span><span class="nc-title">Drift Investigation</span></div>
+    <div class="nc-desc">Find what drifted, compare versions, and see why.</div>
+    <div class="nc-stat">{% if finding_count %}{{ finding_count }} findings{% if high_count %} · <span class="bad">{{ high_count }} high</span>{% endif %} →{% else %}No drifts detected →{% endif %}</div>
+  </a>
+  <a class="nav-card" href="/switch-db/{{ current_db }}?next=explore">
+    <div class="nc-top"><span class="nc-ico"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span><span class="nc-title">Metrics Explorer</span></div>
+    <div class="nc-desc">Browse every metric by agent, handoff, and path.</div>
+    <div class="nc-stat">{{ cat_count }} categor{{ 'y' if cat_count==1 else 'ies' }} →</div>
+  </a>
+  <a class="nav-card" href="/switch-db/{{ current_db }}?next=changelog">
+    <div class="nc-top"><span class="nc-ico"><svg viewBox="0 0 24 24"><line x1="12" y1="3" x2="12" y2="21"/><circle cx="12" cy="7" r="2.4"/><circle cx="12" cy="17" r="2.4"/></svg></span><span class="nc-title">Event Timeline</span></div>
+    <div class="nc-desc">Every config change, version snapshot, and drift event over time.</div>
+    <div class="nc-stat">{% if event_count %}{{ event_count }} event{{ '' if event_count==1 else 's' }} →{% else %}No events yet →{% endif %}</div>
+  </a>
+</div>
+
+<!-- Top signals -->
+{% if top_signals %}
+<div class="ov-section">Top signals</div>
+{% for f in top_signals %}
+<a class="sig" href="/switch-db/{{ current_db }}?next=drift2">
+  <span class="sig-name">{{ f.entity }}</span>
+  <span class="sig-type r-{{ f.risk }}">{{ f.type }}</span>
+  <span class="sig-metrics">{{ f.metrics|join(', ') }}</span>
+</a>
+{% endfor %}
+{% endif %}
+
+<!-- Versions -->
+<div class="ov-section">Versions</div>
+<div class="ver-panel">
+  <div class="ver-panel-h">
+    <div>
+      <div style="font-weight:700;">Version snapshots</div>
+      <div class="ver-meta">Baseline is v{{ baseline_v }} — drift and comparisons are measured against it.</div>
+    </div>
+    <button class="btn btn-sm btn-primary" onclick="snapshotVersion()">+ Create snapshot</button>
+  </div>
+  {% for v in versions %}
+  <div class="ver-row2 {{ 'is-base' if v.num==baseline_v else '' }}">
+    <div class="ver-left">
+      <span class="ver-dot"></span>
+      <span class="ver-id">v{{ v.num }}</span>
+      <span class="ver-meta">{{ v.label }}{% if v.created_at %} · {{ v.created_at|et('%Y-%m-%d') }}{% endif %}</span>
+    </div>
+    <span class="ver-stat"><div class="n">{{ v.runs }}</div><div class="k">runs</div></span>
+    <span class="ver-stat"><div class="n">{{ v.success_rate|int }}%</div><div class="k">success</div></span>
+    <span class="ver-stat"><div class="n">${{ '%.4f'|format(v.avg_cost) }}</div><div class="k">avg cost</div></span>
+    <span class="ver-action">
+      {% if v.num==baseline_v %}<span class="base-badge">Baseline</span>
+      {% else %}<button class="base-btn" onclick="setBaseline({{ v.num }})">Set as baseline</button>{% endif %}
+    </span>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function snapshotVersion(){
+    const label = prompt("Name this snapshot (e.g. 'v2 — new analyst prompt'):", "");
+    if (label === null) return;
+    fetch('/version/snapshot', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({label})}).then(r=>r.json()).then(()=>location.reload());
+  }
+  function setBaseline(num){
+    fetch('/set-baseline/'+num, {method:'POST'}).then(r=>r.json()).then(()=>location.reload());
+  }
+</script>
+{% endblock %}

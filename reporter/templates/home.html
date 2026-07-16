@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Home — AgentPulse{% endblock %}
+{% block content %}
+<style>
+  .hm-title { font-size:1.6rem; font-weight:700; color:#1a1a2e; }
+  .hm-sub { color:#6c757d; font-size:.9rem; margin-bottom:20px; }
+  .hm-sec { font-size:1.05rem; font-weight:700; color:#1a1a2e; margin:6px 0 14px; }
+
+  /* KPI strip */
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit, minmax(190px,1fr)); gap:16px; margin-bottom:26px; }
+  .kpi { background:#fff; border:1px solid #eef0f5; border-radius:14px; padding:16px 18px; display:flex; align-items:center; gap:14px; }
+  .kpi-ico { width:42px; height:42px; border-radius:11px; display:flex; align-items:center; justify-content:center; background:#eef0fb; color:#3949ab; flex-shrink:0; }
+  .kpi-ico svg { width:21px; height:21px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .kpi-ico.warn { background:#fff1e0; color:#e0871a; }
+  .kpi .l { font-size:.78rem; color:#8a90a0; }
+  .kpi .v { font-size:1.55rem; font-weight:700; line-height:1.05; color:#1a1a2e; }
+
+  /* layout: cards + activity */
+  .hm-grid { display:flex; gap:20px; align-items:flex-start; }
+  .hm-main { flex:1; min-width:0; }
+  .hm-side { width:330px; flex-shrink:0; }
+  .proj-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(290px,1fr)); gap:16px; }
+
+  .pcard { display:block; background:#fff; border:1px solid #e6e8ef; border-radius:14px; padding:16px 18px;
+           text-decoration:none; color:#1a1a2e; box-shadow:0 2px 8px rgba(0,0,0,.05); transition:box-shadow .15s, border-color .15s, transform .12s; }
+  .pcard:hover { box-shadow:0 8px 20px rgba(0,0,0,.10); border-color:#cdd2e0; transform:translateY(-2px); }
+  .pcard-top { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .pcard-name { font-weight:700; font-size:1.02rem; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pcard-meta { display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:13px; }
+  .pcard-runs { font-size:1.4rem; font-weight:700; line-height:1; } .pcard-runs small { font-size:.68rem; font-weight:600; color:#99a1b3; text-transform:uppercase; letter-spacing:.4px; display:block; margin-top:3px; }
+  .pcard-upd { font-size:.74rem; color:#9aa0b0; text-align:right; }
+  .pcard-foot { display:flex; align-items:center; gap:12px; border-top:1px solid #f2f3f8; padding-top:12px; }
+  .pc-drift { display:flex; flex-direction:column; gap:4px; }
+  .pc-k { font-size:.62rem; text-transform:uppercase; letter-spacing:.5px; color:#9aa0b0; }
+  .pc-drift-v { display:flex; align-items:center; gap:6px; font-size:.82rem; font-weight:600; }
+  .ddot { width:8px; height:8px; border-radius:50%; }
+  .spark { flex:1; height:30px; }
+  .spark polyline { stroke-width:2; fill:none; }
+
+  /* drift/health colors */
+  .d-normal{color:#1e7d4a} .ddot.d-normal{background:#2f9e44} .spark.d-normal polyline{stroke:#2f9e44}
+  .d-drift{color:#9a5b12}  .ddot.d-drift{background:#e0871a}  .spark.d-drift polyline{stroke:#e0871a}
+  .d-high{color:#b42318}   .ddot.d-high{background:#fa5252}   .spark.d-high polyline{stroke:#fa5252}
+  .d-empty{color:#9aa0b0}  .ddot.d-empty{background:#ced4da}  .spark.d-empty polyline{stroke:#ced4da}
+  .h-healthy{background:#e6f4ea;color:#1e6b3a} .h-good{background:#e8eef9;color:#2d4a8a}
+  .h-warning{background:#fff4e0;color:#7a4a00} .h-empty{background:#f1f3f7;color:#8a90a0}
+
+  /* activity */
+  .act-panel { background:#fff; border:1px solid #eef0f5; border-radius:14px; padding:16px 18px; }
+  .act-h { font-weight:700; margin-bottom:12px; }
+  .act-item { display:flex; gap:11px; padding:10px 0; border-top:1px solid #f4f5f9; }
+  .act-item:first-of-type { border-top:none; }
+  .act-ico { width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .act-ico svg { width:15px; height:15px; stroke:currentColor; fill:none; stroke-width:1.8; }
+  .act-version{background:#e6f4ea;color:#1e7d4a} .act-drift{background:#fdecec;color:#c0392b} .act-runs{background:#eef0fb;color:#3949ab}
+  .act-title { font-size:.85rem; font-weight:600; } .act-sub { font-size:.76rem; color:#8a90a0; }
+  .act-when { font-size:.72rem; color:#9aa0b0; margin-top:2px; }
+</style>
+
+<div class="hm-title">Projects</div>
+<div class="hm-sub">Explore runs, monitor drift, and investigate changes across your agent systems.</div>
+
+<!-- KPI strip -->
+<div class="kpis">
+  <div class="kpi"><span class="kpi-ico"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span><div><div class="v">{{ stats.projects }}</div><div class="l">Total projects</div></div></div>
+  <div class="kpi"><span class="kpi-ico"><svg viewBox="0 0 24 24"><polyline points="3 12 7 12 10 5 14 19 17 12 21 12"/></svg></span><div><div class="v">{{ stats.runs }}</div><div class="l">Total runs</div></div></div>
+  <div class="kpi"><span class="kpi-ico warn"><svg viewBox="0 0 24 24"><path d="M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span><div><div class="v">{{ stats.alerts }}</div><div class="l">Active drift alerts</div></div></div>
+  <div class="kpi"><span class="kpi-ico"><svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.3 7 12 12 20.7 7"/><line x1="12" y1="22" x2="12" y2="12"/></svg></span><div><div class="v">{{ stats.snapshots }}</div><div class="l">Version snapshots</div></div></div>
+</div>
+
+<div class="hm-grid">
+  <div class="hm-main">
+    <div class="hm-sec">All projects</div>
+    {% if projects %}
+    <div class="proj-grid">
+      {% for p in projects %}
+      <a class="pcard" href="/switch-db/{{ p.name }}?next=overview">
+        <div class="pcard-top">
+          <span class="pcard-name">{{ p.name }}</span>
+        </div>
+        <div class="pcard-meta">
+          <div class="pcard-runs">{{ p.runs }}<small>runs</small></div>
+          <div class="pcard-upd">{% if p.last %}Updated<br>{{ p.last|et('%Y-%m-%d') }}{% else %}No runs yet{% endif %}</div>
+        </div>
+        <div class="pcard-foot">
+          <div class="pc-drift">
+            <span class="pc-k">Drift Status</span>
+            <span class="pc-drift-v d-{{ p.drift }}"><span class="ddot d-{{ p.drift }}"></span>{{ {'normal':'Healthy','drift':'Warning','high':'Critical','empty':'—'}[p.drift] }}</span>
+          </div>
+          {% if p.spark %}<svg class="spark d-{{ p.drift }}" viewBox="0 0 110 30" preserveAspectRatio="none"><polyline points="{{ p.spark }}"/></svg>{% endif %}
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}<div class="text-muted">No projects found.</div>{% endif %}
+  </div>
+
+  <!-- Recent activity -->
+  <aside class="hm-side">
+    <div class="act-panel">
+      <div class="act-h">Recent activity</div>
+      {% for a in activity %}
+      <div class="act-item">
+        <span class="act-ico act-{{ a.type }}">
+          {% if a.type=='version' %}<svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+          {% elif a.type=='drift' %}<svg viewBox="0 0 24 24"><path d="M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/></svg>
+          {% else %}<svg viewBox="0 0 24 24"><polyline points="3 12 7 12 10 5 14 19 17 12 21 12"/></svg>{% endif %}
+        </span>
+        <div>
+          <div class="act-title">{{ a.title }}</div>
+          <div class="act-sub">{{ a.sub }}</div>
+          <div class="act-when">{% if a.ts %}{{ a.ts|et }}{% endif %}</div>
+        </div>
+      </div>
+      {% else %}<div class="text-muted small">No activity yet.</div>{% endfor %}
+    </div>
+  </aside>
+</div>
+{% endblock %}

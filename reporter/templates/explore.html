@@ -1,0 +1,508 @@
+{% extends "base.html" %}
+{% block title %}Metrics Explorer — AgentPulse{% endblock %}
+{% block content %}
+<style>
+  .ex-head { font-size:1.4rem; font-weight:700; color:#1a1a2e; }
+  .ex-sub { color:#8a90a0; font-size:.9rem; margin-bottom:16px; }
+  /* filter pills (shared look with Drift Investigation) */
+  .di-bar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .di-pill { position:relative; display:inline-block; width:250px; box-sizing:border-box; }
+  .di-pill > summary, .di-pill.static { display:flex; box-sizing:border-box; align-items:center; gap:9px;
+      list-style:none; border:1px solid #e2e5ee; border-radius:9px; padding:5px 12px; background:#fff; cursor:pointer; }
+  .di-pill > summary { width:100%; }
+  .di-pill > summary::-webkit-details-marker { display:none; }
+  .di-pill-label { display:block; font-size:.6rem; text-transform:uppercase; letter-spacing:.5px; color:#9aa0b0; }
+  .di-pill.ts > summary { flex-direction:row; align-items:center; gap:10px; padding:5px 12px; }
+  .di-pill.static { flex-direction:column; align-items:flex-start; gap:0; padding:4px 14px; }
+  .ts-ico { width:19px; height:19px; object-fit:contain; opacity:.8; flex-shrink:0; }
+  .ts-col { display:flex; flex-direction:column; gap:1px; flex:1; min-width:0; }
+  .ts-range { font-size:.84rem; font-weight:600; color:#1a1a2e; }
+  .ts-tz { font-size:.66rem; color:#9aa0b0; }
+  .ts-caret { font-size:.7rem; color:#9aa0b0; margin-left:auto; flex-shrink:0; }
+  .di-pop { position:absolute; top:115%; left:0; z-index:20; background:#fff; border:1px solid #e2e5ee;
+      border-radius:10px; padding:12px; box-shadow:0 10px 28px rgba(20,20,40,.12); }
+  .di-pop.ts-pop { display:flex; flex-direction:column; gap:0; padding:8px; width:264px; text-align:left; }
+  .ts-search { display:flex; align-items:center; gap:8px; border:1px solid #e2e5ee; border-radius:8px; padding:6px 10px; margin-bottom:6px; }
+  .ts-search input { border:none; outline:none; flex:1; font-size:.85rem; background:transparent; min-width:0; }
+  .ts-opt { display:block; text-align:left; padding:8px 10px; border-radius:7px; font-size:.85rem; color:#1a1a2e; text-decoration:none; }
+  .ts-opt:hover { background:#f3f5fb; } .ts-opt.active { background:#e8eaf6; font-weight:600; }
+  .ts-cal-toggle { padding:8px 10px; font-size:.85rem; color:#3949ab; cursor:pointer; border-top:1px solid #f0f1f5; margin-top:4px; }
+  .ts-cal { display:none; flex-direction:column; gap:8px; padding:8px 6px 4px; }
+  .ts-cal.show { display:flex; } .ts-cal label, .ts-cal input, .ts-cal .btn { width:100%; box-sizing:border-box; }
+  .di-pill-select { appearance:none; -webkit-appearance:none; border:none; background:transparent; font-size:.86rem;
+      font-weight:600; color:#1a1a2e; padding:0 18px 0 0; margin:0; width:100%; outline:none; cursor:pointer; }
+  .di-pill-valwrap { position:relative; display:inline-flex; align-items:center; width:100%; }
+  .di-pill-caret { position:absolute; right:0; top:50%; transform:translateY(-50%); pointer-events:none; width:0; height:0;
+      border-left:4px solid transparent; border-right:4px solid transparent; border-top:5px solid #aeb4c2; }
+  .di-pop.ver-pop { display:flex; flex-direction:column; gap:10px; padding:12px; width:auto; min-width:240px; text-align:left; }
+  .ver-cols { display:flex; flex-direction:column; gap:11px; }
+  .ver-row { display:flex; flex-direction:column; gap:5px; }
+  .ver-row > span { font-size:.66rem; text-transform:uppercase; letter-spacing:.5px; color:#99a1b3; }
+  .ver-checks { display:flex; flex-direction:row; flex-wrap:wrap; gap:8px 16px; }
+  .ver-check { display:flex; align-items:center; gap:7px; font-size:.85rem; font-weight:600; color:#1a1a2e; cursor:pointer; margin:0; white-space:nowrap; }
+  .ver-actions { display:flex; align-items:center; gap:14px; }
+  .ver-all { font-size:.78rem; font-weight:600; color:#3949ab; text-decoration:none; }
+  .ver-all:hover { text-decoration:underline; }
+  /* explorer layout */
+  .ex-grid { display:flex; gap:18px; }
+  .ex-rail { width:190px; flex-shrink:0; align-self:flex-start; position:sticky; top:16px;
+      max-height:calc(100vh - 90px); overflow-y:auto; }
+  .ex-railh { font-size:.66rem; text-transform:uppercase; letter-spacing:.5px; color:#99a1b3; margin:14px 6px 6px; }
+  .ex-railh:first-child { margin-top:0; }
+  .ex-search { display:flex; flex-direction:column; gap:5px; margin:0 4px 8px; }
+  .ex-search input { width:100%; box-sizing:border-box; border:1px solid #e2e5ee; border-radius:7px;
+      padding:6px 9px; font-size:.82rem; color:#1a1a2e; outline:none; }
+  .ex-search input:focus { border-color:#9aa7e0; }
+  .ex-noent { display:none; color:#99a1b3; font-size:.8rem; padding:7px 11px; }
+  .ex-link { display:block; padding:7px 11px; border-radius:8px; color:#3a3f55; text-decoration:none;
+      font-size:.88rem; font-weight:500; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ex-link:hover { background:#f0f4ff; color:#1a1a2e; }
+  .ex-link.active { background:#e8eaf6; color:#1a1a2e; font-weight:600; }
+  /* handoffs rail — From/To dropdowns + grouped tree */
+  .ho-filters select { width:100%; box-sizing:border-box; border:1px solid #e2e5ee; border-radius:7px;
+      padding:6px 8px; font-size:.82rem; color:#3a3f55; background:#fff; cursor:pointer; }
+  .ho-filters select:focus { border-color:#9aa7e0; outline:none; }
+  .ho-group { margin-bottom:8px; }
+  .ho-from { font-size:.84rem; font-weight:700; color:#1a1a2e; padding:5px 11px 3px; white-space:nowrap;
+      overflow:hidden; text-overflow:ellipsis; }
+  .ho-from .ho-n { color:#9aa0b0; font-weight:600; font-size:.78rem; }
+  .ho-child { display:block; padding:5px 11px 5px 22px; border-radius:8px; color:#5a6072; text-decoration:none;
+      font-size:.84rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ho-child:hover { background:#f0f4ff; color:#1a1a2e; }
+  .ho-child.active { background:#e8eaf6; color:#1a1a2e; font-weight:600; }
+  .ex-main { flex:1; min-width:0; }
+  .ex-tabs { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; border-bottom:1px solid #eef0f5; padding-bottom:11px; }
+  .ex-tab { padding:5px 13px; border-radius:7px; font-size:.86rem; font-weight:600; color:#5a6072; text-decoration:none; }
+  .ex-tab:hover { background:#f0f4ff; color:#1a1a2e; }
+  .ex-tab.active { background:#3949ab; color:#fff; }
+  .panel { background:#fff; border:1px solid #eef0f5; border-radius:12px; }
+  .panel-b { padding:14px 16px; }
+  .chart-legend { display:flex; flex-wrap:wrap; gap:6px 16px; font-size:.74rem; color:#6c757d; margin-bottom:14px; }
+  .chart-legend .lg { display:inline-flex; align-items:center; gap:6px; }
+  .chart-legend i { display:inline-block; font-style:normal; }
+  .lg-line { width:17px; height:0; border-top:2.5px solid; border-radius:2px; }
+  .lg-band { width:17px; height:10px; background:rgba(66,99,235,.14); border-radius:2px; }
+  .lg-dash { width:17px; height:0; border-top:2px dashed #b0b6c3; }
+  .impact-chip { font-size:.74rem; font-weight:700; padding:2px 9px; border-radius:12px; background:#fbe7e7; color:#8a1f1f; }
+  .qmark { display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; border-radius:50%;
+      border:1px solid #c2c8d6; color:#8a90a0; font-size:9px; font-weight:700; font-style:italic; cursor:help; margin-left:4px; vertical-align:middle; line-height:1; }
+  .ex-empty { color:#8a90a0; padding:40px; text-align:center; }
+  .ex-main-h { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px; }
+  .ex-main-h .chart-legend { margin-bottom:0; }
+  .cm-open { border:1px solid #3949ab; background:#3949ab; color:#fff; border-radius:8px; font-size:.8rem;
+             font-weight:600; padding:6px 13px; cursor:pointer; white-space:nowrap; }
+  .cm-open:hover { background:#2f3e93; }
+  .cm-tag { font-size:.6rem; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#7048e8;
+            background:#efe9fb; border-radius:5px; padding:1px 6px; }
+  .cm-delx { border:none; background:none; color:#adb5bd; font-size:1.1rem; line-height:1; cursor:pointer; padding:0 2px; }
+  .cm-delx:hover { color:#fa5252; }
+  .ex-chart-h { display:flex; align-items:center; gap:6px; margin-bottom:2px; }
+  .ex-chart-r { margin-left:auto; display:flex; align-items:center; gap:6px; }
+  .th-btn { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px;
+            border:1px solid #e2e5ee; border-radius:6px; background:#fff; cursor:pointer; color:#9aa0b0; padding:0; flex-shrink:0; }
+  .th-btn svg { width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:1.7; stroke-linecap:round; }
+  .th-btn:hover { border-color:#e8590c; color:#e8590c; }
+  .th-btn.th-on { border-color:#e8590c; color:#e8590c; background:#fff4ec; }
+  /* modal */
+  .cm-overlay { display:none; position:fixed; inset:0; background:rgba(20,20,40,.4); z-index:2000;
+                align-items:flex-start; justify-content:center; padding-top:9vh; }
+  .cm-card { background:#fff; border-radius:14px; width:430px; max-width:92vw; box-shadow:0 20px 50px rgba(20,20,40,.25); padding:18px 20px; }
+  .cm-h { font-weight:700; font-size:1.05rem; display:flex; align-items:center; gap:6px; margin-bottom:12px; }
+  .cm-x { margin-left:auto; cursor:pointer; color:#adb5bd; font-size:1.4rem; line-height:1; }
+  .cm-x:hover { color:#1a1a2e; }
+  .cm-tabs { display:flex; gap:6px; margin-bottom:14px; border-bottom:1px solid #eef0f5; }
+  .cm-tab { border:none; background:none; padding:6px 12px; font-size:.85rem; font-weight:600; color:#8a90a0;
+            cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; }
+  .cm-tab.active { color:#3949ab; border-bottom-color:#3949ab; }
+  .cm-form { display:flex; flex-direction:column; gap:11px; }
+  .cm-form > label { display:flex; flex-direction:column; gap:4px; font-size:.72rem; font-weight:600;
+                     text-transform:uppercase; letter-spacing:.4px; color:#99a1b3; }
+  .cm-form input, .cm-form select { border:1px solid #e2e5ee; border-radius:8px; padding:7px 9px; font-size:.88rem;
+                                     font-weight:500; color:#1a1a2e; background:#fff; text-transform:none; letter-spacing:0; }
+  .cm-formula { display:flex; gap:6px; } .cm-formula select { flex:1; }
+  .cm-formula select:nth-child(2) { flex:0 0 56px; text-align:center; }
+  .cm-form .btn { align-self:flex-start; margin-top:2px; }
+  .cm-hint { font-size:.72rem; color:#9aa0b0; text-transform:none; letter-spacing:0; font-weight:400; }
+  .cm-cur { font-size:.78rem; color:#5a6072; background:#f7f8fb; border:1px solid #eef0f5; border-radius:7px;
+            padding:7px 10px; text-transform:none; letter-spacing:0; font-weight:400; }
+  .cm-cur b { color:#1a1a2e; }
+  .cm-pct { display:flex; align-items:center; gap:6px; }
+  .cm-pct input { flex:1; } .cm-pct span { font-weight:700; color:#8a90a0; }
+  .cm-list-h { font-size:.66rem; text-transform:uppercase; letter-spacing:.5px; color:#99a1b3; margin:16px 0 6px; border-top:1px solid #f0f1f5; padding-top:12px; }
+  .cm-row { display:flex; align-items:center; gap:10px; font-size:.84rem; padding:5px 0; }
+  .cm-del { margin-left:auto; border:1px solid #f1c0c0; background:#fff; color:#c0392b; border-radius:6px; font-size:.74rem; font-weight:600; padding:3px 9px; cursor:pointer; }
+  .cm-del:hover { background:#fdecec; }
+  /* Routes entity — DAG of every distinct route with count + share */
+  .rt-head { font-size:.92rem; font-weight:700; color:#1a1a2e; }
+  .rt-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:12px; }
+  .rt-card { border:1px solid #eef0f6; border-radius:10px; background:#fff; overflow:hidden; }
+  .rt-cardh { display:flex; align-items:baseline; gap:8px; padding:9px 12px; border-bottom:1px solid #f0f1f5; }
+  .rt-pct { font-size:1rem; font-weight:700; color:#3a4cc0; font-variant-numeric:tabular-nums; }
+  .rt-count { font-size:.74rem; color:#9aa0b0; font-variant-numeric:tabular-nums; }
+  .rt-usual { margin-left:auto; font-size:.64rem; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#1e7d4a; background:#e8f6ec; border-radius:6px; padding:2px 8px; }
+  .rt-graph { height:150px; width:100%; background:#fbfcff; position:relative; }
+</style>
+
+<div class="ex-head">Metrics Explorer</div>
+<div class="ex-sub">Browse every metric by category and entity. Same baseline band and version comparison as Drift Investigation.</div>
+
+<!-- Filter bar (Time Range / Task Type / Version) -->
+<form class="di-bar mb-3" method="get">
+  <input type="hidden" name="db" value="{{ request.args.get('db','') }}">
+  <input type="hidden" name="range" value="{{ rp }}">
+  <input type="hidden" name="category" value="{{ category }}">
+  <input type="hidden" name="entity" value="{{ entity }}">
+  {% set qs %}&category={{ category }}&entity={{ entity }}{% if task_type %}&task_type={{ task_type }}{% endif %}{% if vcmp.explicit %}{% for n in vcmp.selected %}&version={{ n }}{% endfor %}{% endif %}{% if request.args.get('db') %}&db={{ request.args.get('db') }}{% endif %}{% endset %}
+  <details class="di-pill ts">
+    <summary>
+      <svg class="ts-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3.5" y="5" width="17" height="16" rx="2"/>
+        <path d="M8 3v4M16 3v4M3.5 10.5h17"/>
+      </svg>
+      <span class="ts-col"><span class="di-pill-label">Time Range</span>
+        <span class="ts-range">{{ range_display }} <span class="ts-tz">{{ tz_label }}</span></span></span>
+      <span class="ts-caret">▾</span>
+    </summary>
+    <div class="di-pop ts-pop">
+      <div class="ts-search"><input placeholder='Search or type "25m"' onkeydown="tsSearch(event)"></div>
+      {% for key,label,_ in ranges %}
+      <a class="ts-opt {{ 'active' if key==active_range else '' }}" href="/explore?range={{ key }}{{ qs }}">{{ label }}</a>
+      {% endfor %}
+      <div class="ts-cal-toggle" onclick="document.getElementById('tsCal').classList.toggle('show')">Pick from a calendar</div>
+      <div class="ts-cal {{ 'show' if start and end else '' }}" id="tsCal">
+        <label>From<input type="date" name="start" value="{{ start or '' }}"></label>
+        <label>To<input type="date" name="end" value="{{ end or '' }}"></label>
+        <button class="btn btn-sm btn-primary" type="submit">Apply</button>
+      </div>
+    </div>
+  </details>
+  <label class="di-pill static">
+    <span class="di-pill-label">Task Type</span>
+    <span class="di-pill-valwrap">
+      <select name="task_type" class="di-pill-select" onchange="this.form.submit()">
+        <option value="">All</option>
+        {% for t in task_types %}<option value="{{ t }}" {{ 'selected' if t==task_type else '' }}>{{ t }}</option>{% endfor %}
+      </select>
+      <span class="di-pill-caret"></span>
+    </span>
+  </label>
+  <details class="di-pill ver">
+    <summary>
+      <span class="ts-col"><span class="di-pill-label">Version</span><span class="ts-range">{{ vcmp.label }}</span></span>
+      <span class="ts-caret">▾</span>
+    </summary>
+    <div class="di-pop ver-pop" onclick="event.stopPropagation()">
+      <div class="ver-row"><span>Show</span><div class="ver-checks">
+        {% for n in vcmp.ver_options %}<label class="ver-check"><input type="checkbox" name="version" value="{{ n }}" {{ 'checked' if vcmp.explicit and n in vcmp.selected else '' }}> v{{ n }}</label>{% endfor %}
+      </div></div>
+      <div class="ver-actions">
+        <button class="btn btn-sm btn-primary" type="submit">Apply</button>
+        <a class="ver-all" href="/explore?range={{ rp }}&category={{ category }}&entity={{ entity }}{% if task_type %}&task_type={{ task_type }}{% endif %}{% if request.args.get('db') %}&db={{ request.args.get('db') }}{% endif %}">Show all</a>
+      </div>
+    </div>
+  </details>
+  <span class="ms-auto text-muted small">{{ run_count }} runs</span>
+</form>
+
+{% if run_count == 0 %}
+<div class="panel"><div class="ex-empty">No runs in this range.</div></div>
+{% else %}
+{% set keep %}&range={{ rp }}{% if task_type %}&task_type={{ task_type }}{% endif %}{% if vcmp.explicit %}{% for n in vcmp.selected %}&version={{ n }}{% endfor %}{% endif %}{% if request.args.get('db') %}&db={{ request.args.get('db') }}{% endif %}{% endset %}
+
+<!-- category tabs (few, fixed) -->
+<div class="ex-tabs">
+  {% for c in cats %}
+  <a class="ex-tab {{ 'active' if c==category else '' }}" href="/explore?category={{ c }}{{ keep }}">{{ cat_labels.get(c, c) }}</a>
+  {% endfor %}
+</div>
+
+<div class="ex-grid">
+  <!-- left rail: entities (unknown count → scrollable sidebar) -->
+  <aside class="ex-rail">
+    <div class="ex-railh">Entity</div>
+    {% if category == 'handoffs' %}
+    <div class="ex-search ho-filters">
+      <select id="hoFrom" onchange="filterHandoff()">
+        <option value="">From: any</option>
+        {% for f in handoff_froms %}<option value="{{ f }}">{{ f }}</option>{% endfor %}
+      </select>
+      <select id="hoTo" onchange="filterHandoff()">
+        <option value="">To: any</option>
+        {% for t in handoff_tos %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+      </select>
+    </div>
+    <a class="ex-link {{ 'active' if entity in ('','*') else '' }}" href="/explore?category={{ category }}&entity=*{{ keep }}">All handoffs</a>
+    {% for g in handoff_tree %}
+    <div class="ho-group" data-from="{{ g.from }}">
+      <div class="ho-from">{{ g.from }} <span class="ho-n">({{ g.targets|length }})</span></div>
+      {% for c in g.targets %}
+      <a class="ho-child {{ 'active' if c.ent==entity else '' }}" data-to="{{ c.to }}" href="/explore?category=handoffs&entity={{ c.ent }}{{ keep }}">→ {{ c.to }}</a>
+      {% endfor %}
+    </div>
+    {% endfor %}
+    <div class="ex-noent" id="entNone">No matches.</div>
+    {% else %}
+    {% if entities|length > 1 %}
+    <div class="ex-search">
+      <input id="entQ" type="text" placeholder="Search" autocomplete="off" oninput="filterEnt()">
+    </div>
+    {% endif %}
+    <a class="ex-link {{ 'active' if entity in ('','*') else '' }}" href="/explore?category={{ category }}&entity=*{{ keep }}">All</a>
+    {% for e in entities %}
+    <a class="ex-link ent-row {{ 'active' if e==entity else '' }}" data-ent="{{ e|lower }}" href="/explore?category={{ category }}&entity={{ e }}{{ keep }}">{{ e }}</a>
+    {% endfor %}
+    <div class="ex-noent" id="entNone">No matches.</div>
+    {% endif %}
+  </aside>
+  <script>
+  function filterEnt() {
+    var rows = document.querySelectorAll('.ent-row'), shown = 0;
+    var q = (document.getElementById('entQ').value || '').trim().toLowerCase();
+    rows.forEach(function(r) {
+      var ok = (r.dataset.ent || '').indexOf(q) > -1;
+      r.style.display = ok ? '' : 'none'; if (ok) shown++;
+    });
+    document.getElementById('entNone').style.display = shown ? 'none' : 'block';
+  }
+  function filterHandoff() {
+    var f = document.getElementById('hoFrom').value, t = document.getElementById('hoTo').value, shown = 0;
+    document.querySelectorAll('.ho-group').forEach(function(g) {
+      var fromOk = !f || g.dataset.from === f, anyChild = false;
+      g.querySelectorAll('.ho-child').forEach(function(ch) {
+        var ok = fromOk && (!t || ch.dataset.to === t);
+        ch.style.display = ok ? '' : 'none'; if (ok) anyChild = true;
+      });
+      g.style.display = anyChild ? '' : 'none'; if (anyChild) shown++;
+    });
+    document.getElementById('entNone').style.display = shown ? 'none' : 'block';
+  }
+  </script>
+
+  <!-- main: metric charts, or the route DAGs when the Routes entity is selected -->
+  <div class="ex-main">
+    {% if category == 'path' and entity == 'Routes' %}
+    <div class="ex-main-h"><div class="rt-head">All routes <span class="text-muted">· {{ route_cards|length }} distinct · {{ routes_total }} runs</span></div></div>
+    <div class="rt-grid">
+      {% for r in route_cards %}
+      <div class="rt-card">
+        <div class="rt-cardh">
+          <span class="rt-pct">{{ r.pct }}%</span>
+          <span class="rt-count">{{ r.count }}× of {{ routes_total }} · {{ r.length }} agent{{ '' if r.length==1 else 's' }}</span>
+          {% if r.canonical %}<span class="rt-usual">usual</span>{% endif %}
+        </div>
+        <div id="{{ r.gid }}" class="rt-graph"></div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="ex-main-h">
+      <div class="chart-legend">
+        <span class="lg"><i class="lg-line" style="border-top-color:#4263eb"></i> Within range</span>
+        <span class="lg"><i class="lg-line" style="border-top-color:#fa5252"></i> Drift</span>
+        <span class="lg"><i class="lg-band"></i> Normal range (p10–p90)</span>
+        <span class="lg"><i class="lg-dash"></i> Version marker</span>
+        <span class="lg"><i class="lg-line" style="border-top-color:#e8590c; border-top-style:dashed"></i> Threshold</span>
+      </div>
+      <button class="cm-open" onclick="openCM()">+ New metric</button>
+    </div>
+
+    <div class="row g-3" id="exGrid"></div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Custom-metric / threshold modal -->
+<div id="cmModal" class="cm-overlay" onclick="if(event.target===this)closeCM()">
+  <div class="cm-card">
+    <div class="cm-h">Custom metrics — <span class="text-muted">{{ cat_labels.get(category, category) }}</span><span class="cm-x" onclick="closeCM()">×</span></div>
+    <div class="cm-tabs">
+      <button type="button" class="cm-tab active" onclick="cmTab('formula',this)">Derived formula</button>
+      <button type="button" class="cm-tab" onclick="cmTab('threshold',this)">Threshold</button>
+    </div>
+
+    <form id="cmFormula" class="cm-form" action="/custom-metric" onsubmit="return cmSubmit(this)">
+      <input type="hidden" name="category" value="{{ category }}">
+      <input type="hidden" name="entity" value="{{ entity }}">
+      <label>Name<input name="name" placeholder="cost per token" required></label>
+      <label>Formula
+        <div class="cm-formula">
+          <select name="a">{% for m in base_metrics %}<option>{{ m }}</option>{% endfor %}</select>
+          <select name="op"><option>/</option><option>*</option><option>+</option><option>-</option></select>
+          <select name="b">{% for m in base_metrics %}<option>{{ m }}</option>{% endfor %}</select>
+        </div>
+      </label>
+      <button class="btn btn-sm btn-primary" type="submit">Add metric</button>
+      <div class="cm-hint">Applies to the current entity scope ({{ entity if entity not in ('','*') else 'all entities' }}).</div>
+    </form>
+
+    <form id="cmThreshold" class="cm-form" style="display:none" action="/threshold" onsubmit="return cmSubmit(this)">
+      <input type="hidden" name="category" value="{{ category }}">
+      <label>Metric<select name="metric" onchange="updateThCur(this.value)">{% for m in all_metrics %}<option>{{ m }}</option>{% endfor %}</select></label>
+      <div class="cm-cur" id="thCur"></div>
+      <label>Condition<select name="dir"><option value="max">Alert if above baseline by</option><option value="min">Alert if below baseline by</option></select></label>
+      <label>Percent
+        <div class="cm-pct"><input name="pct" type="number" step="any" placeholder="20"><span>%</span></div>
+      </label>
+      <button class="btn btn-sm btn-primary" type="submit">Set threshold</button>
+      <div class="cm-hint">Threshold is a % change from the metric's baseline mean. Leave % empty and submit to remove it.</div>
+    </form>
+
+    {% if customs_here %}
+    <div class="cm-list-h">Your derived metrics here</div>
+    {% for cm in customs_here %}
+    <div class="cm-row"><span><b>{{ cm.name }}</b> = {{ cm.a }} {{ cm.op }} {{ cm.b }}</span>
+      <button class="cm-del" onclick="delCustom('{{ cm.name }}')">Delete</button></div>
+    {% endfor %}
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script>
+  function tsSearch(e){ if(e.key==='Enter'){ const v=(e.target.value||'').trim().toLowerCase();
+    if(/^\d+(m|h|d)$/.test(v)){ e.preventDefault(); location='/explore?range='+v; } } }
+  const CHARTS = {{ charts_json|safe }};
+  const MARKERS = {{ markers_json|safe }};
+  const METRIC_HELP = {{ metric_help_json|safe }};
+  const ALLCHARTS = [];
+
+  function qm(metric){ const h=METRIC_HELP[metric]; if(!h) return '';
+    return ` <span class="qmark" data-tip="${h.replace(/"/g,'&quot;')}">i</span>`; }
+
+  // Vertical dashed lines that label where each version starts.
+  const vmarkers = { id:'vmarkers', afterDraw(ch){ const x=ch.scales.x, a=ch.chartArea, c=ch.ctx;
+    (MARKERS||[]).forEach(m=>{ const px=x.getPixelForValue(m.x); if(px<a.left||px>a.right) return;
+      c.save(); c.strokeStyle='#b0b6c3'; c.setLineDash([4,3]); c.lineWidth=1;
+      c.beginPath(); c.moveTo(px,a.top); c.lineTo(px,a.bottom); c.stroke();
+      c.setLineDash([]); c.fillStyle='#9aa0b0'; c.font='10px sans-serif'; c.fillText(m.label,px+2,a.bottom-2); c.restore(); }); } };
+  Chart.register(vmarkers);
+
+  const crosshair = { id:'crosshair', afterDraw(ch){ const act=ch.getActiveElements(); if(!act||!act.length) return;
+    const px=act[0].element.x, a=ch.chartArea, c=ch.ctx; c.save(); c.strokeStyle='rgba(120,120,140,.45)';
+    c.setLineDash([3,3]); c.lineWidth=1; c.beginPath(); c.moveTo(px,a.top); c.lineTo(px,a.bottom); c.stroke(); c.restore(); } };
+  Chart.register(crosshair);
+
+  // Horizontal target line for a threshold expressed as a % from the baseline mean.
+  const threshold = { id:'threshold', afterDraw(ch){ const t=ch.$threshold, base=ch.$baseMean;
+    if(!t || base==null) return;
+    const val = base * (1 + (t.dir==='min'?-1:1) * t.pct/100);
+    const y=ch.scales.y, a=ch.chartArea, c=ch.ctx; const py=y.getPixelForValue(val);
+    if(py<a.top||py>a.bottom) return; c.save(); c.strokeStyle='#e8590c'; c.setLineDash([5,4]); c.lineWidth=1.4;
+    c.beginPath(); c.moveTo(a.left,py); c.lineTo(a.right,py); c.stroke(); c.setLineDash([]);
+    c.fillStyle='#e8590c'; c.font='bold 9px sans-serif';
+    c.fillText((t.dir==='min'?'≥ −':'≤ +')+t.pct+'%', a.left+4, py-3); c.restore(); } };
+  Chart.register(threshold);
+
+  function clearAllHover(){ ALLCHARTS.forEach(ch=>{ ch.setActiveElements([]); ch.tooltip.setActiveElements([],{x:0,y:0}); ch.update('none'); }); }
+  function syncOthers(src, els){ const dsi=ch=>ch.data.datasets.length-1;
+    const sx=els.length?src.data.datasets[dsi(src)].data[els[0].index].x:null;
+    ALLCHARTS.forEach(ch=>{ if(ch===src) return; const d=dsi(ch);
+      const j=sx==null?-1:ch.data.datasets[d].data.findIndex(p=>p.x===sx);
+      if(j<0){ ch.setActiveElements([]); ch.tooltip.setActiveElements([],{x:0,y:0}); }
+      else { ch.setActiveElements([{datasetIndex:d,index:j}]); ch.tooltip.setActiveElements([{datasetIndex:d,index:j}],{x:0,y:0}); }
+      ch.update('none'); }); }
+
+  function render(canvasId, c){
+    const cv=document.getElementById(canvasId); if(!cv||!c) return;
+    const b=c.band||{}, ds_start=b.drift_start, xs=c.points.map(p=>p.x), data=[];
+    let lineFill=false;
+    if(b.available){
+      data.push({data:xs.map(x=>({x,y:b.p10})), borderColor:'transparent', pointRadius:0, fill:false});
+      data.push({data:xs.map(x=>({x,y:b.p90})), borderColor:'transparent', pointRadius:0, backgroundColor:'rgba(66,99,235,.08)', fill:'-1'});
+      lineFill={target:1, above:'rgba(250,82,82,.16)', below:'transparent'};
+    }
+    // Colour = drift status (blue in-range, red drifting); version is shown by the markers.
+    data.push({ data:c.points.map(p=>({x:p.x,y:p.y})), borderColor:'#4263eb', borderWidth:2, tension:.25,
+      fill:lineFill, pointRadius:0, pointHoverRadius:4,
+      segment:{ borderColor:(ctx)=> (ds_start!=null && ctx.p1DataIndex>=ds_start)?'#fa5252':'#4263eb' } });
+    const ch=new Chart(cv,{ type:'line', data:{datasets:data}, options:{
+      animation:false, maintainAspectRatio:false, interaction:{mode:'index', intersect:false},
+      onHover:(e,els,chart)=>syncOthers(chart, els),
+      plugins:{ legend:{display:false}, vmarkers:{}, tooltip:{callbacks:{title:(it)=>'run #'+it[0].parsed.x}} },
+      scales:{ x:{type:'linear', ticks:{precision:0, font:{size:10}}}, y:{ticks:{font:{size:10}}} } }});
+    ch.$threshold = c.threshold || null;
+    ch.$baseMean = (c.band && c.band.mean != null) ? c.band.mean : null;
+    cv.addEventListener('mouseleave', clearAllHover); ALLCHARTS.push(ch);
+  }
+
+  function delCustom(name){ const fd=new FormData(); fd.append('name', name);
+    fetch('/custom-metric/delete', {method:'POST', body:fd}).then(()=>location.reload()); }
+
+  // Per-chart threshold: open the modal on the Threshold tab, prefilled for this metric.
+  const THRESHOLDS = {}, BASELINES = {};
+  CHARTS.forEach(c=>{ if(c.threshold) THRESHOLDS[c.metric]=c.threshold;
+    if(c.band && c.band.mean!=null) BASELINES[c.metric]=c.band.mean; });
+  function fmtNum(v){ if(v==null) return '—'; const a=Math.abs(v);
+    return a>=100?(+v).toFixed(0):a>=1?(+v).toFixed(2):(+v).toPrecision(2); }
+  function updateThCur(metric){
+    const el=document.getElementById('thCur'); if(!el) return;
+    const base=BASELINES[metric], th=THRESHOLDS[metric];
+    let s = (base!=null) ? `Baseline mean <b>${fmtNum(base)}</b>` : 'Baseline not available yet for this metric';
+    if(th && base!=null){ const v=base*(1+(th.dir==='min'?-1:1)*th.pct/100);
+      s += ` · current threshold <b>${th.dir==='min'?'≥ −':'≤ +'}${th.pct}%</b> (≈ ${fmtNum(v)})`; }
+    else if(base!=null){ s += ' · no threshold set'; }
+    el.innerHTML = s;
+  }
+  function openThreshold(metric){
+    openCM(); cmTab('threshold', document.querySelectorAll('.cm-tab')[1]);
+    const f=document.getElementById('cmThreshold'), th=THRESHOLDS[metric];
+    if(f.querySelector('[name=metric]')) f.querySelector('[name=metric]').value=metric;
+    f.querySelector('[name=pct]').value = th ? th.pct : '';
+    f.querySelector('[name=dir]').value = th ? th.dir : 'max';
+    updateThCur(metric);
+  }
+
+  const grid=document.getElementById('exGrid');
+  if(grid){
+    if(!CHARTS.length){ grid.innerHTML='<div class="ex-empty">No metrics for this selection.</div>'; }
+    CHARTS.forEach((c,i)=>{
+      const col=document.createElement('div'); col.className='col-md-6';
+      const m = c.metric.replace(/'/g,"");
+      const del = c.custom ? `<button class="cm-delx" title="Delete custom metric" onclick="delCustom('${m}')">×</button>` : '';
+      const tag = c.custom ? '<span class="cm-tag">custom</span>' : '';
+      const thBtn = `<button class="th-btn${c.threshold?' th-on':''}" title="${c.threshold?'Edit threshold':'Set threshold'}" onclick="openThreshold('${m}')"><svg viewBox="0 0 24 24"><line x1="3" y1="13" x2="21" y2="13" stroke-dasharray="4 3"/><circle cx="12" cy="13" r="2.2"/></svg></button>`;
+      col.innerHTML=`<div class="panel"><div class="panel-b">
+        <div class="ex-chart-h">
+          <span style="font-weight:700;font-size:.95rem;">${c.entity} · <span class="text-muted">${c.metric}</span></span>${qm(c.metric)}${tag}
+          <span class="ex-chart-r"><span class="impact-chip">${c.impact.label}</span>${thBtn}${del}</span>
+        </div>
+        <div style="height:150px;"><canvas id="x${i}"></canvas></div></div></div>`;
+      grid.appendChild(col); render('x'+i, c);
+    });
+  }
+
+  // Custom-metric modal
+  function openCM(){ document.getElementById('cmModal').style.display='flex'; }
+  function closeCM(){ document.getElementById('cmModal').style.display='none'; }
+  function cmTab(which, btn){
+    document.querySelectorAll('.cm-tab').forEach(t=>t.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('cmFormula').style.display = which==='formula'?'flex':'none';
+    document.getElementById('cmThreshold').style.display = which==='threshold'?'flex':'none';
+  }
+  function cmSubmit(form){ fetch(form.action,{method:'POST', body:new FormData(form)}).then(()=>location.reload()); return false; }
+
+  // Route DAGs (Path → Routes entity). vis-network is loaded globally in base.html.
+  const ROUTE_GRAPHS = {{ route_graphs_json|safe }};
+  function initRouteGraph(elId, data){
+    const el = document.getElementById(elId);
+    if(!el || !data || !data.nodes || !data.nodes.length || typeof vis === 'undefined') return;
+    const net = new vis.Network(el,
+      { nodes: new vis.DataSet(data.nodes), edges: new vis.DataSet(data.edges) },
+      { layout:{ hierarchical:{ enabled:true, direction:'LR', sortMethod:'directed',
+                 levelSeparation:120, nodeSpacing:44, treeSpacing:36 } },
+        physics:false,
+        interaction:{ hover:false, zoomView:true, dragView:true, dragNodes:false, selectable:false, keyboard:false },
+        nodes:{ shape:'box', margin:7, widthConstraint:{ minimum:54 }, font:{ size:11, color:'#1a1a2e' },
+                shadow:{ enabled:true, size:3, x:0, y:1, color:'rgba(0,0,0,0.08)' } },
+        edges:{ arrows:{ to:{ enabled:true, scaleFactor:0.55 } },
+                smooth:{ type:'cubicBezier', forceDirection:'horizontal', roundness:0.4 } } });
+    net.once('afterDrawing', () => net.fit({ animation:false }));
+  }
+  Object.keys(ROUTE_GRAPHS).forEach(id => initRouteGraph(id, ROUTE_GRAPHS[id]));
+</script>
+{% endblock %}

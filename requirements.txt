@@ -1,0 +1,21 @@
+# Core dashboard
+flask>=3.0
+
+# Optional — OTel exporters (not required for the dashboard)
+opentelemetry-sdk>=1.24
+opentelemetry-api>=1.24
+
+# Config + CLI niceties
+pyyaml>=6.0
+rich>=13.0
+
+# NOTE: openai / anthropic SDKs are NOT required to install this dashboard.
+# The instrumentation patches them only if they're already present in the
+# multi-agent system you're observing.
+
+# AI triage ("Suggest next checks") in Drift Investigation
+anthropic>=0.40
+
+# MCP server (agentpulse_mcp.py) — exposes the drift engine to Claude Code/Desktop
+mcp>=1.0
+

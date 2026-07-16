@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block title %}All Runs — Observability{% endblock %}
+{% block content %}
+<style>
+  /* Anomaly badges wrap to multiple lines instead of stretching the column */
+  .anomaly-stack { display: flex; flex-wrap: wrap; gap: 4px;
+                   justify-content: center; max-width: 240px; margin: 0 auto; }
+  /* Sortable column headers */
+  th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+  th.sortable:hover { background: #eef0f6; }
+  .sort-ind { font-size: 0.7rem; color: #3949ab; }
+</style>
+
+<!-- Summary strip -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="metric-box">
+      <div class="value text-primary">{{ stats.total_runs }}</div>
+      <div class="label">Total Runs</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="metric-box">
+      <div class="value text-success">{{ stats.clean_runs }}</div>
+      <div class="label">Finished</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="metric-box">
+      <div class="value text-danger">{{ stats.crashed_runs }}</div>
+      <div class="label">Crashed</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="metric-box">
+      <div class="value">${{ "%.4f"|format(stats.avg_cost) }}</div>
+      <div class="label">Avg Cost / Run</div>
+    </div>
+  </div>
+</div>
+
+<!-- Runs table -->
+<div class="card">
+  <div class="card-header card-header-soft d-flex justify-content-between align-items-center">
+    <span>Run History</span>
+    <span class="text-secondary small">click a row for details</span>
+  </div>
+  <div class="card-body p-0">
+    {% if runs %}
+    <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle text-center">
+      <thead class="table-light">
+        <tr>
+          <th class="text-center sortable" data-key="num" data-type="num" title="Run order (1 = earliest)"># <span class="sort-ind"></span></th>
+          <th class="text-center">Prompt</th>
+          <th class="text-center sortable" data-key="type" data-type="text">Type <span class="sort-ind"></span></th>
+          <th class="text-center sortable" data-key="turns" data-type="num">Turns <span class="sort-ind"></span></th>
+          <th class="text-center">Status</th>
+          <th class="text-center">Time</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in runs %}
+        <tr class="run-row" onclick="window.location='/run/{{ r.run_id }}'">
+          <td data-key="num" data-sortval="{{ r.run_number }}"><span class="text-muted small">{{ r.run_number }}</span></td>
+          <td class="text-start">
+            <span class="text-dark" style="font-size:0.9rem;" title="{{ r.task_text }}">
+              {{ r.task_text[:70] }}{% if r.task_text|length > 70 %}…{% endif %}
+            </span>
+          </td>
+          <td data-key="type" data-sortval="{{ (r.task_type or '')|lower }}">
+            <span class="text-secondary small">{{ r.task_type or '—' }}</span>
+            <span class="badge bg-light text-secondary ms-1" style="font-weight:500;">v{{ r.prompt_version }}</span>
+          </td>
+          <td data-key="turns" data-sortval="{{ r.total_turns }}">{{ r.total_turns }}</td>
+          <td>
+            {% if r.clean %}
+              <span class="badge-ok">finished</span>
+            {% else %}
+              <span class="badge-drift" title="{{ r.termination_short }}">crashed</span>
+            {% endif %}
+          </td>
+          <td class="text-muted small">{{ r.timestamp|et }}</td>
+          <td onclick="event.stopPropagation();" style="width:36px;">
+            <button class="btn btn-sm btn-link p-0 row-delete"
+                    title="Delete this run"
+                    onclick="obsDeleteRun(event, '{{ r.run_id }}')">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6c757d"
+                   stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+                   style="opacity:0.65;" aria-label="Delete" role="img">
+                <path d="M4 7h16"/>
+                <path d="M9 7V5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5v2"/>
+                <path d="M6.5 7l.8 12.2A1.8 1.8 0 0 0 9.1 21h5.8a1.8 1.8 0 0 0 1.8-1.8L17.5 7"/>
+                <path d="M10 11v6M14 11v6"/>
+              </svg>
+            </button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="no-runs">No runs yet. Run your multi-agent system and check back.</div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  async function obsDeleteRun(ev, runId) {
+    ev.stopPropagation();
+    if (!confirm('Delete this run and all its data? This cannot be undone.')) return;
+    const r = await fetch(`/run/${runId}/delete`, {method: 'POST'});
+    if (r.ok) {
+      ev.target.closest('tr').remove();
+    } else {
+      alert('Delete failed: ' + r.status);
+    }
+  }
+  // Click-to-sort on the Type and Turns column headers. Toggles asc/desc and
+  // re-orders the rows in place (purely client-side — no reload).
+  (function () {
+    const table = document.querySelector('table');
+    if (!table) return;
+    const tbody = table.querySelector('tbody');
+    let curKey = null, curDir = 1;
+    table.querySelectorAll('th.sortable').forEach(th => {
+      th.addEventListener('click', () => {
+        const key = th.dataset.key;
+        const numeric = th.dataset.type === 'num';
+        curDir = (curKey === key) ? -curDir : 1;
+        curKey = key;
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort((a, b) => {
+          const av = a.querySelector(`[data-key="${key}"]`)?.dataset.sortval ?? '';
+          const bv = b.querySelector(`[data-key="${key}"]`)?.dataset.sortval ?? '';
+          const cmp = numeric ? ((parseFloat(av) || 0) - (parseFloat(bv) || 0))
+                              : av.localeCompare(bv);
+          return cmp * curDir;
+        });
+        rows.forEach(r => tbody.appendChild(r));
+        table.querySelectorAll('th.sortable .sort-ind').forEach(s => s.textContent = '');
+        th.querySelector('.sort-ind').textContent = curDir === 1 ? ' ▲' : ' ▼';
+      });
+    });
+  })();
+
+  // Tiny custom hover tooltip — appended to <body> so the table's overflow
+  // can't clip it. Way more reliable than Bootstrap's Tooltip plugin for
+  // dynamically-generated rows.
+  (function () {
+    const tip = document.createElement('div');
+    tip.className = 'obs-tip-pop';
+    document.body.appendChild(tip);
+
+    document.querySelectorAll('.obs-tip').forEach(el => {
+      el.addEventListener('mouseenter', () => {
+        const items = (el.dataset.tip || '').split('|').filter(Boolean);
+        if (!items.length) return;
+        tip.innerHTML = items.map(s => '<div>' + s + '</div>').join('');
+        const r = el.getBoundingClientRect();
+        // Show first so we can measure, then position above the badge.
+        tip.style.display = 'block';
+        tip.style.left = (r.left + r.width / 2 - tip.offsetWidth / 2 + window.scrollX) + 'px';
+        tip.style.top  = (r.top  - tip.offsetHeight - 8 + window.scrollY) + 'px';
+      });
+      el.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+    });
+  })();
+</script>
+{% endblock %}
