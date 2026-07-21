@@ -17,7 +17,9 @@ AgentPulse is an **open-source reference implementation** of drift investigation
 
 ---
 
-## 60-second demo
+## Quick start
+
+Running locally takes about a minute:
 
 ```bash
 git clone https://github.com/prove-ai/agentpulse.git
@@ -168,7 +170,7 @@ There's also `report.py`, a per-run metrics report for a single project (`python
 
 ### Claude Code
 
-The repo ships with a project-scoped [`.mcp.json`](.mcp.json), so if you followed the demo setup (venv at `.venv/`), just open Claude Code inside the repo and approve the server when prompted:
+The repo ships with a project-scoped [`.mcp.json`](.mcp.json), so if you followed the Quick start (venv at `.venv/`), just open Claude Code inside the repo and approve the server when prompted:
 
 ```bash
 cd agentpulse
@@ -219,7 +221,7 @@ This is an experiment in how agent failures should be investigated, published to
 - **Where is the drift detector wrong?** Thresholds live in [`config/drift_rules.yaml`](config/drift_rules.yaml) — if it over- or under-fires on your data, that's exactly the feedback we want.
 - **Should agent observability stay a dashboard**, or become structured context for a coding agent that performs the investigation? The MCP server is our bet on the second answer — tell us where it falls short.
 
-Open a [GitHub issue](https://github.com/prove-ai/agentpulse/issues) with your take, your telemetry schema, or a war story about an agent failure that was hard to localize. Design disagreements are as welcome as bug reports.
+**Feedback is welcome.** Please open a [GitHub issue](https://github.com/prove-ai/agentpulse/issues) for questions, ideas, or bug reports — telemetry schemas, war stories about hard-to-localize agent failures, and design disagreements are all fair game. For private feedback, contact me at [leyla@proveai.com](mailto:leyla@proveai.com).
 
 ---
 
