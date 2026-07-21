@@ -32,7 +32,9 @@ pip install -r requirements.txt
 python reporter/dashboard.py
 ```
 
-Open <http://localhost:5001>. The bundled sample database (`db/demo.db`, a 4-agent content pipeline with 120 runs across 4 prompt versions and one real drift) is pre-loaded, so the Drift Investigation view above is the first thing you can reproduce. Your own `db/*.db` files are gitignored; only the demo sample is part of the repo.
+Open <http://localhost:5001>. At this point you are looking at the bundled sample project (`db/demo.db`, a 4-agent content pipeline with 120 runs across 4 prompt versions and one real drift), so the Drift Investigation view above is the first thing you can reproduce.
+
+One thing to be clear about: **AgentPulse does not collect anything on its own.** The dashboard only reads SQLite files under `db/`. To see your own agents instead of the demo, you add two lines to your system, which is the next section. Your own `db/*.db` files stay on your machine; they are gitignored, and only the demo sample is part of the repo.
 
 ---
 
@@ -88,7 +90,7 @@ Even if you never run AgentPulse, these design decisions carry over to any in-ho
 
 ## Instrumenting your system
 
-Add two lines at the top of your entrypoint (before any agent imports):
+This is the step that gets your own runs into AgentPulse. Add two lines at the top of your entrypoint (before any agent imports):
 
 ```python
 import sys; sys.path.insert(0, '/path/to/agentpulse')
@@ -96,7 +98,7 @@ from sdk import instrument
 instrument(task_type='my-system', prompt_version=1, db_name='my-system')
 ```
 
-Then run your system as usual. Every LLM call, agent turn, tool call, and handoff is captured into `db/my-system.db`. The dashboard auto-discovers any `*.db` under `db/` and shows a project picker in the sidebar. Pass a different `db_name` per system to monitor several at once.
+Then run your system as usual. Every LLM call, agent turn, tool call, and handoff is captured into `db/my-system.db`. Reload the dashboard and `my-system` appears in the sidebar picker next to `demo`. Pass a different `db_name` per system to monitor several at once.
 
 ### What gets captured
 
