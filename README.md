@@ -19,25 +19,6 @@ If you try it, I would like to hear what worked and what did not. See [Feedback]
 
 ---
 
-## Quick start
-
-Running locally takes about a minute:
-
-```bash
-git clone https://github.com/prove-ai/agentpulse.git
-cd agentpulse
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python reporter/dashboard.py
-```
-
-Open <http://localhost:5001>. At this point you are looking at the bundled sample project (`db/demo.db`, a 4-agent content pipeline with 120 runs across 4 prompt versions and one real drift), so the Drift Investigation view above is the first thing you can reproduce.
-
-One thing to be clear about: **AgentPulse does not collect anything on its own.** The dashboard only reads SQLite files under `db/`. To see your own agents instead of the demo, you add two lines to your system, which is the next section. Your own `db/*.db` files stay on your machine; they are gitignored, and only the demo sample is part of the repo.
-
----
-
 ## Architecture
 
 One drift engine, three surfaces. The dashboard, the CLI, and the MCP server call the same engine functions, so they always agree on what "drift" means. Data flows left to right:
@@ -55,7 +36,7 @@ flowchart LR
 
 In words:
 
-1. You add two lines to your app. `instrument()` patches the OpenAI and Anthropic SDKs (plus framework hooks like AutoGen's) inside your process, so every LLM call, tool call, and handoff is captured with no other code changes.
+1. You add two lines to your app. `instrument()` patches the OpenAI and Anthropic SDKs inside your process and hooks AutoGen and LangChain when they are present. With those frameworks, every LLM call, tool call, and handoff is captured with no other code changes; custom orchestrators need extra hooks (see [Framework support](#framework-support)).
 2. Captured events are written through `storage/` into a plain SQLite file per project, `db/<project>.db`. No server, no agent daemon.
 3. The `analysis/` engine reads those runs and computes metrics, anomaly reports, drift findings, and causal chains.
 4. Three surfaces present the same findings: the Flask dashboard, the `today-drift` CLI, and the MCP server that Claude Code or Claude Desktop connects to.
@@ -66,7 +47,7 @@ In words:
 | **CLI** (`today-drift`) | Drift findings as readable cards in your terminal, useful as a daily standup check |
 | **MCP server** | The same findings inside Claude Code / Claude Desktop, so a coding agent can run the investigation |
 
-Works with OpenAI and Anthropic SDKs. Framework agnostic: tested with AutoGen, LangChain, and plain `asyncio.gather` orchestrations.
+Works with the OpenAI and Anthropic SDKs. How much is captured automatically depends on your framework; see [Framework support](#framework-support).
 
 ---
 
@@ -88,9 +69,24 @@ Even if you never run AgentPulse, these design decisions carry over to any in-ho
 
 ---
 
-## Instrumenting your system
+## Getting started
 
-This is the step that gets your own runs into AgentPulse. Add two lines at the top of your entrypoint (before any agent imports):
+### Step 1: run the dashboard with the demo data
+
+```bash
+git clone https://github.com/prove-ai/agentpulse.git
+cd agentpulse
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python reporter/dashboard.py
+```
+
+Open <http://localhost:5001>. You are looking at the bundled sample project (`db/demo.db`, a 4-agent content pipeline with 120 runs across 4 prompt versions and one real drift), so the Drift Investigation view above is the first thing you can reproduce.
+
+### Step 2: instrument your own system
+
+This is the step that gets your own runs in. Add two lines at the top of your entrypoint (before any agent imports):
 
 ```python
 import sys; sys.path.insert(0, '/path/to/agentpulse')
@@ -98,7 +94,19 @@ from sdk import instrument
 instrument(task_type='my-system', prompt_version=1, db_name='my-system')
 ```
 
-Then run your system as usual. Every LLM call, agent turn, tool call, and handoff is captured into `db/my-system.db`. Reload the dashboard and `my-system` appears in the sidebar picker next to `demo`. Pass a different `db_name` per system to monitor several at once.
+If your system runs on a supported framework (see the table below), that is the whole integration. Run it as usual, and every LLM call, agent turn, tool call, and handoff is captured into `db/my-system.db`. Reload the dashboard and `my-system` appears in the sidebar picker next to `demo`. Pass a different `db_name` per system to monitor several at once. Your own `db/*.db` files stay on your machine; they are gitignored, and only the demo sample is part of the repo.
+
+### Framework support
+
+The two lines above are the whole story only when your framework tells AgentPulse where agent boundaries are. Be aware of the difference:
+
+| Your stack | Integration effort | What you get |
+|---|---|---|
+| AutoGen (`SelectorGroupChat`) | The two lines, nothing else | Full capture: turns, tokens, tools, handoffs, termination |
+| LangChain, LangGraph, and frameworks built on LangChain callbacks (e.g. CrewAI) | The two lines, nothing else | Full capture: each chain/node reports its name through the callback system; tokens come from the SDK patches |
+| Plain OpenAI/Anthropic SDK with your own orchestration (e.g. `asyncio.gather`) | Manual work on top of the two lines | The SDK patches record tokens, latency, and model per call, but you must open and close the run yourself and mark agent boundaries |
+
+The reason for the difference: AutoGen and LangChain expose agent boundaries through their event and callback systems, so AgentPulse can attribute every call to the right agent automatically. A hand-rolled orchestrator has no such signal, so you provide it yourself: open a `RunSession`, call `set_active_agent()` at each agent's entry (it is a ContextVar, so parallel `asyncio.gather` tasks stay correctly attributed), and mark turns with `on_turn_start` / `on_turn_end`. The primitives live in [`sdk/session.py`](sdk/session.py), and the adapters in [`sdk/patches/`](sdk/patches) are working examples of how to drive them.
 
 ### What gets captured
 
@@ -182,7 +190,7 @@ There is also `report.py`, a per-run metrics report for a single project (`pytho
 
 ### Claude Code
 
-The repo ships with a project-scoped [`.mcp.json`](.mcp.json), so if you followed the Quick start (venv at `.venv/`), just open Claude Code inside the repo and approve the server when prompted:
+The repo ships with a project-scoped [`.mcp.json`](.mcp.json), so if you followed Getting started (venv at `.venv/`), just open Claude Code inside the repo and approve the server when prompted:
 
 ```bash
 cd agentpulse
