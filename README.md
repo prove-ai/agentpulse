@@ -38,17 +38,25 @@ Open <http://localhost:5001>. The bundled sample database (`db/demo.db`, a 4-age
 
 ## Architecture
 
-One drift engine, three surfaces. The dashboard, the CLI, and the MCP server call the same engine functions, so they always agree on what "drift" means.
+One drift engine, three surfaces. The dashboard, the CLI, and the MCP server call the same engine functions, so they always agree on what "drift" means. Data flows left to right:
 
 ```mermaid
 flowchart LR
-    A["your multi-agent app<br/>+ instrument()"] --> B["sdk/<br/>patches openai · anthropic"]
-    B --> C[("SQLite<br/>db/&lt;project&gt;.db")]
-    C --> D["analysis/<br/>metrics → anomalies → drift → causal chains"]
-    D --> E["Flask dashboard"]
-    D --> F["today-drift CLI"]
-    D --> G["MCP server → Claude"]
+    A["your multi-agent app<br/>+ instrument()"] --> B["sdk/<br/>intercepts LLM calls,<br/>tool calls, handoffs"]
+    B --> C[("storage/<br/>SQLite, one file<br/>per project")]
+    C --> D["analysis/<br/>metrics, anomalies,<br/>drift, causal chains"]
+    D --> E["Dashboard (Flask)"]
+    D --> F["CLI (today-drift)"]
+    D --> G["MCP server"]
+    G --> H["Claude Code /<br/>Claude Desktop"]
 ```
+
+In words:
+
+1. You add two lines to your app. `instrument()` patches the OpenAI and Anthropic SDKs (plus framework hooks like AutoGen's) inside your process, so every LLM call, tool call, and handoff is captured with no other code changes.
+2. Captured events are written through `storage/` into a plain SQLite file per project, `db/<project>.db`. No server, no agent daemon.
+3. The `analysis/` engine reads those runs and computes metrics, anomaly reports, drift findings, and causal chains.
+4. Three surfaces present the same findings: the Flask dashboard, the `today-drift` CLI, and the MCP server that Claude Code or Claude Desktop connects to.
 
 | Surface | What it's for |
 |---|---|
