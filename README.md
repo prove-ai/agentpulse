@@ -3,17 +3,19 @@
 [![tests](https://github.com/prove-ai/agentpulse/actions/workflows/tests.yml/badge.svg)](https://github.com/prove-ai/agentpulse/actions/workflows/tests.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-> Traces tell you *what happened*. They don't tell you *where to start investigating*.
+> Traces tell you what happened. They don't tell you where to start investigating.
 
-AgentPulse is an **open-source reference implementation** of drift investigation for multi-agent systems. It turns raw agent traces — tokens, cost, latency, tool calls, handoffs, DAG structure — into run-level, agent-level, handoff, route, and drift views, and then does the part we think is genuinely unsolved: when an outcome degrades, it traces the drift **upstream through the handoff graph to the component where it originated** and presents the whole causal path.
+AgentPulse is an **open-source reference implementation** of drift investigation for multi-agent systems. It turns raw agent traces (tokens, cost, latency, tool calls, handoffs, DAG structure) into run, agent, handoff, route, and drift views. When an outcome degrades, it traces the drift upstream through the handoff graph to the component where it originated and presents the whole causal path.
 
-**Who it's for.** Teams building in-house observability for multi-agent systems, and anyone exploring how agent failures *should* be investigated. Take the ideas, the schema, or the whole thing.
+**Who it's for.** Teams building in-house observability for multi-agent systems, and anyone exploring how agent failures should be investigated. Use the ideas, the schema, or the whole thing.
 
-**What it's not.** A production observability platform. If you need managed tracing at scale today, use Langfuse, LangSmith, or their peers. AgentPulse is a working exploration of the layer *above* traces: the investigation.
+**What it's not.** A production observability platform. If you need managed tracing at scale today, use Langfuse, LangSmith, or similar tools. AgentPulse explores the layer above traces: the investigation.
+
+If you try it, I would like to hear what worked and what did not. See [Feedback](#feedback).
 
 ![Drift Investigation](docs/screenshots/drift-investigation.png)
 
-*The core view: writer drifted (prompt + model change at run 18), critic's success dropped as a consequence — the fix belongs in writer, not critic.*
+*The core view: writer drifted after a prompt and model change at run 18, and critic's success dropped as a consequence. The fix belongs in writer, not critic.*
 
 ---
 
@@ -30,13 +32,13 @@ pip install -r requirements.txt
 python reporter/dashboard.py
 ```
 
-Open <http://localhost:5001>. The bundled sample database (`db/demo.db` — a 4-agent content pipeline, 120 runs, 4 prompt versions, one real drift) is pre-loaded, so the Drift Investigation view above is the first thing you can reproduce. Your own `db/*.db` files are gitignored — only the demo sample is part of the repo.
+Open <http://localhost:5001>. The bundled sample database (`db/demo.db`, a 4-agent content pipeline with 120 runs across 4 prompt versions and one real drift) is pre-loaded, so the Drift Investigation view above is the first thing you can reproduce. Your own `db/*.db` files are gitignored; only the demo sample is part of the repo.
 
 ---
 
 ## Architecture
 
-One drift engine, three surfaces — the dashboard, the CLI, and the MCP server call the *same* engine functions, so they always agree on what "drift" means.
+One drift engine, three surfaces. The dashboard, the CLI, and the MCP server call the same engine functions, so they always agree on what "drift" means.
 
 ```mermaid
 flowchart LR
@@ -51,34 +53,34 @@ flowchart LR
 | Surface | What it's for |
 |---|---|
 | **Dashboard** (Flask) | Run explorer, timelines, DAGs, trends, and the Drift Investigation view |
-| **CLI** (`today-drift`) | Drift findings as readable cards in your terminal — a daily standup check |
+| **CLI** (`today-drift`) | Drift findings as readable cards in your terminal, useful as a daily standup check |
 | **MCP server** | The same findings inside Claude Code / Claude Desktop, so a coding agent can run the investigation |
 
-Works with OpenAI and Anthropic SDKs. Framework-agnostic — tested with AutoGen, LangChain, and plain `asyncio.gather` orchestrations.
+Works with OpenAI and Anthropic SDKs. Framework agnostic: tested with AutoGen, LangChain, and plain `asyncio.gather` orchestrations.
 
 ---
 
 ## Ideas you can reuse
 
-Even if you never run AgentPulse, these are the design decisions we'd argue for in any in-house build:
+Even if you never run AgentPulse, these design decisions carry over to any in-house build:
 
-1. **Detect agent, handoff, and route drift separately.** An agent getting slower, a handoff payload shrinking, and the execution path changing are different failure classes with different signals — collapsing them into one "anomaly score" hides where to look. (`analysis/drift_detect.py`, `analysis/version_drift.py`)
+1. **Detect agent, handoff, and route drift separately.** An agent getting slower, a handoff payload shrinking, and the execution path changing are different failure classes with different signals. Collapsing them into one "anomaly score" hides where to look. (`analysis/drift_detect.py`, `analysis/version_drift.py`)
 
-2. **Severity needs corroboration, not just magnitude.** A Tier-0 (outcome) breach only escalates to critical when co-timed strong supporting signals *and* a plausible change event line up. A lone moving metric stays a low-confidence candidate. (`analysis/drift_detect.py`, thresholds in `config/drift_rules.yaml`)
+2. **Severity needs corroboration, not just magnitude.** A Tier-0 (outcome) breach only escalates to critical when co-timed strong supporting signals and a plausible change event line up. A lone moving metric stays a low-confidence candidate. (`analysis/drift_detect.py`, thresholds in `config/drift_rules.yaml`)
 
-3. **Trace the symptom to its upstream origination.** Walk the handoff graph upstream from the breached outcome; stop at the component whose *input* is stable but whose *output* drifted. That's where the fix belongs — the downstream agent that "failed" often didn't change at all. (`analysis/drift_chains.py`)
+3. **Trace the symptom to its upstream origination.** Walk the handoff graph upstream from the breached outcome and stop at the component whose input is stable but whose output drifted. That is where the fix belongs. The downstream agent that "failed" often did not change at all. (`analysis/drift_chains.py`)
 
-4. **A change can only explain a drift if it could have caused it.** Config/prompt/model changes are attributed only when they happened at-or-before the drift start, on the same or an upstream component. (`_nearby_change` in `analysis/drift_detect.py`)
+4. **A change can only explain a drift if it could have caused it.** Config, prompt, and model changes are attributed only when they happened at or before the drift start, on the same or an upstream component. (`_nearby_change` in `analysis/drift_detect.py`)
 
 5. **Give the investigation to a coding agent, not just a dashboard.** The MCP server exposes findings as structured, root-cause-led cards, so Claude can triage drift, compare releases, and propose next checks conversationally. (`agentpulse_mcp.py`, `.claude/skills/`)
 
-6. **Pin your metric engine with a snapshot test.** Every chart value for the sample data is pinned by a fixture; a refactor that silently changes a metric fails CI loudly. (`tests/test_series_snapshot.py`)
+6. **Pin your metric engine with a snapshot test.** Every chart value for the sample data is pinned by a fixture. A refactor that silently changes a metric fails CI loudly. (`tests/test_series_snapshot.py`)
 
 ---
 
 ## Instrumenting your system
 
-Add two lines at the **top of your entrypoint** (before any agent imports):
+Add two lines at the top of your entrypoint (before any agent imports):
 
 ```python
 import sys; sys.path.insert(0, '/path/to/agentpulse')
@@ -86,7 +88,7 @@ from sdk import instrument
 instrument(task_type='my-system', prompt_version=1, db_name='my-system')
 ```
 
-That's it. Run your system as usual. Every LLM call, agent turn, tool call, and handoff is captured into `db/my-system.db`. The dashboard auto-discovers any `*.db` under `db/` and shows a project picker in the sidebar; pass a different `db_name` per system to monitor several at once.
+Then run your system as usual. Every LLM call, agent turn, tool call, and handoff is captured into `db/my-system.db`. The dashboard auto-discovers any `*.db` under `db/` and shows a project picker in the sidebar. Pass a different `db_name` per system to monitor several at once.
 
 ### What gets captured
 
@@ -97,7 +99,7 @@ That's it. Run your system as usual. Every LLM call, agent turn, tool call, and 
 | Per-run | total cost, wall-clock, termination reason, prompt version |
 | DAG | parent → child edges (when your orchestrator exposes them), parallel branches, join waits |
 
-No API keys are needed to capture data or browse the dashboard — it only reads SQLite. An `ANTHROPIC_API_KEY` is needed only for the optional AI "suggest next checks" feature (see [Configuration](#configuration)).
+No API keys are needed to capture data or browse the dashboard; it only reads SQLite. An `ANTHROPIC_API_KEY` is needed only for the optional AI "suggest next checks" feature (see [Configuration](#configuration)).
 
 ---
 
@@ -107,22 +109,22 @@ No API keys are needed to capture data or browse the dashboard — it only reads
 The core view, shown at the top of this README: findings ranked by severity, the causal path, what changed, why it matters, potentially related changes, and suggested next checks.
 
 ### Run explorer (`/`)
-Every captured run with status, route, and cost; click through to the per-run detail page with an execution timeline (gantt), the interactive agent-chain DAG, anomalies vs the baseline, and parallel-group efficiency.
+Every captured run with status, route, and cost. Click through to the per-run detail page with an execution timeline (gantt), the interactive agent-chain DAG, anomalies vs the baseline, and parallel-group efficiency.
 
 ![Run explorer](docs/screenshots/run-history.png)
 
 ### Metrics Explorer (`/explore`)
-Chart any metric for any agent, handoff, or the whole system across runs — same baseline bands and version markers as Drift Investigation, plus custom metrics and thresholds.
+Chart any metric for any agent, handoff, or the whole system across runs, with the same baseline bands and version markers as Drift Investigation, plus custom metrics and thresholds.
 
 ![Metrics Explorer](docs/screenshots/metrics-explorer.png)
 
-There's also a trend view (`/trends`) with agent health cards and a handoff health leaderboard, and an event timeline (`/timeline`) of prompt/model/tool changes.
+There is also a trend view (`/trends`) with agent health cards and a handoff health leaderboard, and an event timeline (`/timeline`) of prompt, model, and tool changes.
 
 ---
 
-## CLI — `today-drift`
+## CLI: `today-drift`
 
-The drift findings as terminal cards. No server, no Claude:
+The drift findings as terminal cards, with no server and no Claude involved:
 
 ```bash
 python cli.py                          # all projects, active drifts
@@ -152,13 +154,13 @@ AgentPulse — 1 drift finding  · as of 2026-07-16 17:09 · range 30d · demo
     active 23d, since Jun 23  ·  id demo:chain0
 ```
 
-Findings carry an `id` (like `demo:chain0`) — pass it to `--next` to get the recommended follow-up checks for that specific finding.
+Findings carry an `id` (like `demo:chain0`). Pass it to `--next` to get the recommended follow-up checks for that finding.
 
-There's also `report.py`, a per-run metrics report for a single project (`python report.py --all --db demo`).
+There is also `report.py`, a per-run metrics report for a single project (`python report.py --all --db demo`).
 
 ---
 
-## MCP server — let Claude run the investigation
+## MCP server: let Claude run the investigation
 
 `agentpulse_mcp.py` exposes the drift engine to Claude Code and Claude Desktop as three tools:
 
@@ -166,7 +168,7 @@ There's also `report.py`, a per-run metrics report for a single project (`python
 |---|---|
 | `get_todays_finding` | The drift findings active right now, as root-cause-led investigation cards (which component drifted, why, how long it's been active) |
 | `get_version_comparison` | Baseline-vs-newest (or any pair, or every consecutive pair) version comparison, leading with the change that broke an outcome |
-| `get_next_check_steps` | Recommended next investigation steps for a finding — AI-generated when an `ANTHROPIC_API_KEY` is configured, deterministic checks otherwise |
+| `get_next_check_steps` | Recommended next investigation steps for a finding. AI-generated when an `ANTHROPIC_API_KEY` is configured, deterministic checks otherwise |
 
 ### Claude Code
 
@@ -189,7 +191,7 @@ The repo also bundles three Claude Code **skills** under [`.claude/skills/`](.cl
 
 ### Claude Desktop
 
-Add to `claude_desktop_config.json` (absolute paths required — Desktop spawns servers without a working directory):
+Add to `claude_desktop_config.json`. Use absolute paths, because Desktop spawns servers without a working directory:
 
 ```json
 {
@@ -206,22 +208,26 @@ Add to `claude_desktop_config.json` (absolute paths required — Desktop spawns 
 
 ## Configuration
 
-Copy [`.env.example`](.env.example) to `.env` and set `ANTHROPIC_API_KEY` to enable the AI "suggest next checks" feature (dashboard button, CLI `--next`, MCP `get_next_check_steps`). Everything else works without it — the MCP tool falls back to deterministic checks.
+Copy [`.env.example`](.env.example) to `.env` and set `ANTHROPIC_API_KEY` to enable the AI "suggest next checks" feature (dashboard button, CLI `--next`, MCP `get_next_check_steps`). Everything else works without it; the MCP tool falls back to deterministic checks.
 
-Drift detection thresholds and handoff rules live in [`config/drift_rules.yaml`](config/drift_rules.yaml) — edit and reload the page; no restart needed.
+Drift detection thresholds and handoff rules live in [`config/drift_rules.yaml`](config/drift_rules.yaml). Edit and reload the page; no restart needed.
 
 ---
 
-## What we're trying to learn
+## What I want to learn
 
-This is an experiment in how agent failures should be investigated, published to be argued with. If you build or operate multi-agent systems, we'd genuinely like to know:
+This project is an experiment in how agent failures should be investigated. If you build or operate multi-agent systems, I want to know:
 
-- **What telemetry do you actually collect** for multi-agent systems — and what does AgentPulse's schema miss?
-- **Does the agent / handoff / route drift split match how you triage failures?** Or do you cut the problem differently?
-- **Where is the drift detector wrong?** Thresholds live in [`config/drift_rules.yaml`](config/drift_rules.yaml) — if it over- or under-fires on your data, that's exactly the feedback we want.
-- **Should agent observability stay a dashboard**, or become structured context for a coding agent that performs the investigation? The MCP server is our bet on the second answer — tell us where it falls short.
+- What telemetry do you actually collect for multi-agent systems, and what does AgentPulse's schema miss?
+- Does the agent / handoff / route drift split match how you triage failures?
+- Where is the drift detector wrong? Thresholds live in [`config/drift_rules.yaml`](config/drift_rules.yaml). If it over-fires or under-fires on your data, that is useful feedback.
+- Should agent observability stay a dashboard, or become structured context for a coding agent that performs the investigation? The MCP server is a bet on the second answer.
 
-**Feedback is welcome.** Please open a [GitHub issue](https://github.com/prove-ai/agentpulse/issues) for questions, ideas, or bug reports — telemetry schemas, war stories about hard-to-localize agent failures, and design disagreements are all fair game. For private feedback, contact me at [leyla@proveai.com](mailto:leyla@proveai.com).
+## Feedback
+
+**Feedback is welcome.** Please open a [GitHub issue](https://github.com/prove-ai/agentpulse/issues) for questions, ideas, or bug reports. Telemetry schemas, stories about agent failures that were hard to localize, and design disagreements are all useful.
+
+For private feedback, contact me at [leyla@proveai.com](mailto:leyla@proveai.com).
 
 ---
 
@@ -254,8 +260,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the snapshot-test workflow and guidel
 ## Requirements
 
 - Python 3.10+
-- Flask 3.x (dashboard), `mcp` (MCP server) — both in `requirements.txt`
-- The multi-agent system you observe needs `openai` and/or `anthropic` installed in **its** environment; AgentPulse patches whichever it finds (neither is a hard dependency of AgentPulse itself).
+- Flask 3.x (dashboard) and `mcp` (MCP server), both in `requirements.txt`
+- The multi-agent system you observe needs `openai` and/or `anthropic` installed in **its** environment. AgentPulse patches whichever it finds; neither is a hard dependency of AgentPulse itself.
 
 ## License
 
