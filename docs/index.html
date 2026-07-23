@@ -8,7 +8,7 @@
 <meta property="og:title" content="AgentPulse">
 <meta property="og:description" content="Traces tell you what happened. AgentPulse tells you where to start investigating.">
 <meta property="og:type" content="website">
-<meta property="og:image" content="https://prove-ai.github.io/agentpulse/screenshots/drift-investigation.png">
+<meta property="og:image" content="https://prove-ai.github.io/agentpulse/screenshots/overview.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f56e0'/%3E%3Cpath d='M5 17h5l3-8 4 14 3-6h7' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
   :root {
@@ -79,7 +79,13 @@
   nav .links .btn { padding: 9px 16px; font-size: 14px; }
 
   /* ---- hero ---- */
-  .hero { background: var(--dark); color: #fff; padding: 72px 0 0; overflow: hidden; }
+  .hero {
+    background:
+      radial-gradient(900px 480px at 15% -12%, rgba(47, 86, 224, .28), transparent 62%),
+      radial-gradient(700px 420px at 88% 6%, rgba(124, 58, 237, .14), transparent 60%),
+      var(--dark);
+    color: #fff; padding: 72px 0 0; overflow: hidden;
+  }
   .hero-inner { max-width: 780px; }
   h1 {
     font-size: clamp(30px, 4.6vw, 46px);
@@ -95,17 +101,30 @@
     max-width: 640px;
   }
   .hero .cta { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
-  .hero .note { margin-top: 18px; font-size: 13.5px; color: #7d879f; }
   .hero-shot {
-    margin: 48px auto -2px;
+    margin: 52px auto -2px;
     max-width: 1060px; padding: 0 24px;
   }
-  .hero-shot img {
-    display: block; width: 100%;
-    border-radius: 12px 12px 0 0;
-    border: 1px solid #2a3247; border-bottom: none;
-    box-shadow: 0 -8px 60px rgba(47, 86, 224, .18);
+  .browser {
+    border-radius: 14px 14px 0 0;
+    border: 1px solid #2b3450; border-bottom: none;
+    overflow: hidden; background: #10141f;
+    box-shadow: 0 -14px 90px rgba(47, 86, 224, .28), 0 -2px 24px rgba(124, 58, 237, .12);
   }
+  .browser-bar {
+    display: flex; align-items: center; gap: 7px;
+    padding: 11px 16px; background: #161c2b;
+    border-bottom: 1px solid #232b3f;
+  }
+  .bdot { width: 11px; height: 11px; border-radius: 50%; }
+  .bdot.r { background: #ff5f57; } .bdot.y { background: #febc2e; } .bdot.g { background: #28c840; }
+  .browser-bar .url {
+    margin-left: 12px; font-size: 12px; color: #8d97b3;
+    background: #0e1116; border: 1px solid #202839;
+    padding: 3px 14px; border-radius: 6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .browser img { display: block; width: 100%; }
 
   /* ---- works-with strip ---- */
   .strip { border-bottom: 1px solid var(--line); background: #fff; }
@@ -206,8 +225,6 @@
   .final h2 { color: #fff; }
   .final p { color: #b9c1d4; margin: 14px auto 30px; max-width: 560px; }
   .final .cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
-  .final .mail { margin-top: 20px; font-size: 14px; color: #7d879f; }
-  .final .mail a { color: #b9c1d4; }
 
   footer { background: var(--dark); border-top: 1px solid #1d2434; padding: 26px 0; }
   footer .wrap {
@@ -253,16 +270,21 @@
 
 <div class="hero">
   <div class="wrap hero-inner">
-    <h1>Traces tell you what happened.<br><span class="dim">AgentPulse tells you where to start investigating.</span></h1>
+    <h1><span class="dim">Traces tell you what happened.</span><br>AgentPulse tells you where to start investigating.</h1>
     <p class="lead">An open-source reference implementation of drift investigation for multi-agent systems. When an outcome degrades, AgentPulse traces the drift upstream to the component where it originated: which agent drifted, why, and what to check next.</p>
     <div class="cta">
       <a class="btn btn-primary" href="https://calendly.com/nick-proveai/agent-pulse-demo">Set up a demo</a>
       <a class="btn btn-ghost-dark" href="https://github.com/prove-ai/agentpulse">View on GitHub</a>
     </div>
-    <p class="note">MIT licensed. Runs locally; your runs stay in SQLite on your machine.</p>
   </div>
   <div class="hero-shot">
-    <img src="screenshots/drift-investigation.png" alt="AgentPulse Drift Investigation view showing a critical finding on the writer agent, the metrics that changed, related prompt and model changes, and suggested next checks">
+    <div class="browser">
+      <div class="browser-bar">
+        <span class="bdot r"></span><span class="bdot y"></span><span class="bdot g"></span>
+        <span class="url">localhost:5001 · demo</span>
+      </div>
+      <img src="screenshots/overview.png" alt="AgentPulse project overview showing 120 runs, success rate, an active drift signal, top signals, and version snapshots with per-version success and cost">
+    </div>
   </div>
 </div>
 
@@ -319,10 +341,15 @@ instrument(task_type=<span class="c">'my-system'</span>)</div>
 
     <div class="feature flip">
       <div class="txt">
-        <h3>Run Explorer</h3>
-        <p>Every run with status, route, and cost. Click through to an execution timeline, the interactive agent-chain DAG, and anomalies against your own baseline.</p>
+        <h3>See the run, not the logs</h3>
+        <p>A run is not a wall of log lines. Every run gets an execution timeline and an interactive agent-chain DAG: who ran in what order, how long each turn took, and where the failure surfaced.</p>
+        <ul>
+          <li>Gantt timeline with per-turn tokens, latency, and cost</li>
+          <li>Hover any handoff for payload size, receiver outcome, and downstream success</li>
+          <li>Per-run anomalies against each agent's usual behaviour</li>
+        </ul>
       </div>
-      <div class="shot"><img src="screenshots/run-history.png" alt="Run history view"></div>
+      <div class="shot"><img src="screenshots/run-detail.png" alt="Run detail view with execution timeline and agent chain DAG"></div>
     </div>
 
     <div class="feature">
@@ -393,7 +420,6 @@ instrument(task_type=<span class="c">'my-system'</span>)</div>
       <a class="btn btn-primary" href="https://calendly.com/nick-proveai/agent-pulse-demo">Set up a demo</a>
       <a class="btn btn-ghost-dark" href="https://github.com/prove-ai/agentpulse">View on GitHub</a>
     </div>
-    <p class="mail">Prefer email? <a href="mailto:leyla@proveai.com">leyla@proveai.com</a></p>
   </div>
 </section>
 
