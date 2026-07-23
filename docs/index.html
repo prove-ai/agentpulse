@@ -206,6 +206,75 @@
   }
   .callout .dot { width: 6px; height: 6px; border-radius: 50%; }
   .d-red { background: #e5484d; } .d-blue { background: var(--accent); } .d-amber { background: #f0a020; }
+  /* investigation-path diagram */
+  .invest {
+    margin-top: 40px; background: #fff;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 24px 28px 22px;
+  }
+  .inv-head { font-size: 13px; font-weight: 700; color: var(--ink); }
+  .inv-head span { font-weight: 500; color: var(--muted); }
+  .trace-wrap { overflow-x: auto; padding: 46px 6px 6px; }
+  .trace {
+    position: relative; display: flex; align-items: center;
+    justify-content: center; min-width: 660px; gap: 0;
+  }
+  .inode {
+    position: relative; text-align: center; background: #fff;
+    border: 1.5px solid #cdd3e0; border-radius: 10px;
+    padding: 9px 16px 8px; font-weight: 650; font-size: 14px; color: var(--ink);
+    white-space: nowrap;
+  }
+  .inode small { display: block; font-weight: 500; font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+  .inode.cause { border-color: #e5484d; background: #fef2f2; }
+  .inode.cause small { color: #b3383c; }
+  .inode.symptom { border-color: #f0a020; background: #fff8eb; }
+  .inode.symptom small { color: #a06a10; }
+  .badge-top {
+    position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+    font-size: 9.5px; font-weight: 750; letter-spacing: .07em; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 99px; color: #fff; white-space: nowrap;
+  }
+  .badge-top.bc { background: #e5484d; }
+  .badge-top.bs { background: #f0a020; }
+  .conn { width: 48px; height: 1.5px; background: #cdd3e0; position: relative; flex-shrink: 0; }
+  .conn::after {
+    content: ""; position: absolute; right: -1px; top: -3.5px;
+    border: 4px solid transparent; border-left-color: #cdd3e0; border-right-width: 0;
+  }
+  .conn.hot { background: #e5484d; }
+  .conn.hot::after { border-left-color: #e5484d; }
+  .backtrace {
+    position: absolute; top: -26px; right: 17.8%; width: 23.8%;
+    border-top: 1.5px dashed #8fa0c9;
+  }
+  .backtrace::before {
+    content: ""; position: absolute; left: -1px; top: -5px;
+    border: 4.5px solid transparent; border-right-color: #8fa0c9; border-left-width: 0;
+  }
+  .backlabel {
+    position: absolute; top: -44px; right: 14%;
+    font-size: 11px; font-weight: 600; color: #64708c; white-space: nowrap;
+  }
+  .inv-foot { margin-top: 18px; text-align: center; }
+  .inv-foot .ev {
+    display: inline-block; font-size: 12px; font-weight: 600; color: var(--ink-soft);
+    background: var(--bg-soft); border: 1px solid var(--line);
+    border-radius: 99px; padding: 6px 14px;
+  }
+  /* numbered algorithm steps */
+  .algo { margin: 14px 0 0; padding: 0; list-style: none; counter-reset: n; }
+  .algo li {
+    counter-increment: n; position: relative; padding-left: 30px;
+    margin-bottom: 9px; font-size: 14.5px; color: var(--ink-soft);
+  }
+  .algo li::before {
+    content: counter(n); position: absolute; left: 0; top: 1px;
+    width: 20px; height: 20px; border-radius: 6px;
+    background: #eef2fd; color: var(--accent);
+    font-weight: 700; font-size: 11.5px;
+    display: flex; align-items: center; justify-content: center;
+  }
   .leader { position: absolute; z-index: 1; background: rgba(60, 67, 84, .45); }
   .leader.v { width: 1px; }
   .leader.v::after {
@@ -361,16 +430,36 @@ instrument(task_type=<span class="c">'my-system'</span>)</div>
   <div class="wrap">
     <div class="kicker">What you get</div>
     <h2>Built around the investigation, not the trace viewer</h2>
+    <p class="sub">When an outcome degrades, AgentPulse does not hand you a dashboard of symptoms. It compares every component against your baseline and walks the agent graph to the point where the drift originated.</p>
+
+    <div class="invest">
+      <div class="inv-head">The investigation path <span>· demo project, run 18</span></div>
+      <div class="trace-wrap">
+        <div class="trace">
+          <span class="backtrace"></span>
+          <span class="backlabel">investigation walks upstream from the symptom</span>
+          <div class="inode">researcher<small>input stable · cleared</small></div>
+          <span class="conn"></span>
+          <div class="inode">analyst<small>input stable · cleared</small></div>
+          <span class="conn"></span>
+          <div class="inode cause"><span class="badge-top bc">Root cause</span>writer<small>output drifted · input stable</small></div>
+          <span class="conn hot"></span>
+          <div class="inode symptom"><span class="badge-top bs">Symptom</span>critic<small>success −70 pp vs baseline</small></div>
+        </div>
+      </div>
+      <div class="inv-foot"><span class="ev">⚡ Change log: writer prompt + model changed at run 18 · flagged as the likely cause</span></div>
+    </div>
 
     <div class="feature">
       <div class="txt">
         <h3>Drift Investigation</h3>
-        <p>Findings lead with the root cause, not the symptom. Here: writer drifted after a prompt change, and critic paid the price.</p>
-        <ul>
-          <li>Agent, handoff, and route drift detected separately</li>
-          <li>Severity backed by corroborating signals</li>
-          <li>Suggested next checks per finding</li>
-        </ul>
+        <p>Four rules turn a baseline breach into a root-cause finding:</p>
+        <ol class="algo">
+          <li>Baseline every metric, per agent, handoff, and route</li>
+          <li>Open an investigation only on a sustained outcome breach, never a single noisy spike</li>
+          <li>Walk the graph upstream and stop where inputs are stable but output drifted</li>
+          <li>Correlate prompt, model, and tool changes that could actually have caused it</li>
+        </ol>
       </div>
       <div class="shot">
         <img src="screenshots/drift-focus.png" alt="Drift Investigation finding with related changes and suggested next checks">
