@@ -196,16 +196,24 @@
     border: 1px solid var(--line);
     box-shadow: 0 14px 40px rgba(16, 19, 26, .10);
   }
-  /* floating callout chips over screenshots */
+  /* annotation chips with leader lines, kept off the evidence */
   .callout {
     position: absolute; z-index: 2;
-    display: inline-flex; align-items: center; gap: 7px;
+    display: inline-flex; align-items: center; gap: 6px;
     background: #fff; border: 1px solid var(--line); border-radius: 999px;
-    padding: 7px 13px; font-size: 12.5px; font-weight: 600; color: var(--ink);
-    box-shadow: 0 8px 24px rgba(16, 19, 26, .16); white-space: nowrap;
+    padding: 4px 10px; font-size: 11px; font-weight: 600; color: var(--ink);
+    box-shadow: 0 6px 18px rgba(16, 19, 26, .14); white-space: nowrap;
   }
-  .callout .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .callout .dot { width: 6px; height: 6px; border-radius: 50%; }
   .d-red { background: #e5484d; } .d-blue { background: var(--accent); } .d-amber { background: #f0a020; }
+  .leader { position: absolute; z-index: 1; background: rgba(60, 67, 84, .45); }
+  .leader.v { width: 1px; }
+  .leader.v::after {
+    content: ""; position: absolute; left: -2.5px; bottom: -3px;
+    width: 6px; height: 6px; border-radius: 50%;
+  }
+  .ld-red::after { background: #e5484d; }
+  .ld-blue::after { background: var(--accent); }
 
   /* claude / terminal */
   .split { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; margin-top: 40px; }
@@ -261,7 +269,10 @@
     .feature.flip .shot { order: 2; }
     nav .links a.plain { display: none; }
     section { padding: 56px 0; }
-    .callout { display: none; }
+    .callout, .leader { display: none; }
+  }
+  @media (max-width: 1260px) {
+    .co-out { display: none; }
   }
   @media (max-width: 480px) {
     .tag { display: none; }
@@ -357,8 +368,9 @@ instrument(task_type=<span class="c">'my-system'</span>)</div>
       </div>
       <div class="shot">
         <img src="screenshots/drift-focus.png" alt="Drift Investigation finding with related changes and suggested next checks">
-        <span class="callout" style="top: 7%; left: -16px;"><span class="dot d-red"></span>Root cause identified</span>
-        <span class="callout" style="top: 26%; right: -14px;"><span class="dot d-blue"></span>Prompt change correlated</span>
+        <span class="callout" style="top: -34px; left: 12%;"><span class="dot d-red"></span>Likely cause identified</span>
+        <i class="leader v ld-red" style="left: 30%; top: -10px; height: 20px;"></i>
+        <span class="callout co-out" style="top: -16px; right: -80px;"><span class="dot d-blue"></span>Related change detected</span>
       </div>
     </div>
   </div>
@@ -378,7 +390,7 @@ instrument(task_type=<span class="c">'my-system'</span>)</div>
       </div>
       <div class="shot">
         <img src="screenshots/run-detail.png" alt="Run detail of a parallel workflow: execution timeline with overlapping agent turns and a fan-out agent chain DAG">
-        <span class="callout" style="top: 10%; right: -14px;"><span class="dot d-amber"></span>Bottleneck branch detected</span>
+        <span class="callout" style="top: 75.5%; right: 1%;"><span class="dot d-amber"></span>Bottleneck branch</span>
       </div>
     </div>
   </div>
