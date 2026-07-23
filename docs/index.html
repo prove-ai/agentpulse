@@ -80,37 +80,57 @@
 
   /* ---- hero ---- */
   .hero {
+    position: relative;
     background:
-      radial-gradient(900px 480px at 15% -12%, rgba(47, 86, 224, .28), transparent 62%),
-      radial-gradient(700px 420px at 88% 6%, rgba(124, 58, 237, .14), transparent 60%),
+      radial-gradient(900px 520px at 12% -10%, rgba(47, 86, 224, .30), transparent 62%),
+      radial-gradient(800px 520px at 96% 45%, rgba(124, 58, 237, .18), transparent 62%),
       var(--dark);
-    color: #fff; padding: 72px 0 0; overflow: hidden;
+    color: #fff; padding: 88px 0 96px; overflow: hidden;
   }
-  .hero-inner { max-width: 780px; }
+  /* decorative light streaks, bottom left */
+  .hero::before {
+    content: ""; position: absolute; left: -160px; bottom: -180px;
+    width: 560px; height: 460px; pointer-events: none;
+    background: repeating-linear-gradient(118deg,
+      transparent 0 40px, rgba(99, 102, 241, .35) 40px 41.5px);
+    transform: rotate(-6deg); filter: blur(.5px); opacity: .5;
+    -webkit-mask-image: radial-gradient(closest-side, #000, transparent 78%);
+    mask-image: radial-gradient(closest-side, #000, transparent 78%);
+  }
+  .hero-grid {
+    display: grid; grid-template-columns: 1.02fr 1fr;
+    gap: 56px; align-items: center; position: relative;
+  }
   h1 {
-    font-size: clamp(30px, 4.6vw, 46px);
-    line-height: 1.15;
+    font-size: clamp(28px, 3.3vw, 40px);
+    line-height: 1.18;
     letter-spacing: -0.02em;
     font-weight: 750;
   }
   h1 .dim { color: #8d97b3; }
   .hero p.lead {
     margin: 22px 0 30px;
-    font-size: 18px;
+    font-size: 17px;
     color: #b9c1d4;
-    max-width: 640px;
   }
   .hero .cta { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
-  .hero-shot {
-    margin: 52px auto -2px;
-    max-width: 1060px; padding: 0 24px;
+  .hero-shot { position: relative; }
+  /* soft glow behind the card */
+  .hero-shot::before {
+    content: ""; position: absolute; inset: 6% -4% -2% 2%;
+    background: radial-gradient(closest-side, rgba(47, 86, 224, .38), rgba(124, 58, 237, .16) 60%, transparent);
+    filter: blur(34px); pointer-events: none;
   }
   .browser {
-    border-radius: 14px 14px 0 0;
-    border: 1px solid #2b3450; border-bottom: none;
+    position: relative;
+    border-radius: 14px;
+    border: 1px solid #2b3450;
     overflow: hidden; background: #10141f;
-    box-shadow: 0 -14px 90px rgba(47, 86, 224, .28), 0 -2px 24px rgba(124, 58, 237, .12);
+    box-shadow: 0 30px 80px rgba(5, 8, 18, .55), 0 6px 28px rgba(47, 86, 224, .18);
+    transform: perspective(1600px) rotateY(-7deg) rotateX(1.5deg);
+    transition: transform .35s ease;
   }
+  .hero-shot:hover .browser { transform: perspective(1600px) rotateY(-2deg) rotateX(0deg); }
   .browser-bar {
     display: flex; align-items: center; gap: 7px;
     padding: 11px 16px; background: #161c2b;
@@ -234,6 +254,12 @@
   footer a { color: #b9c1d4; }
   footer .right { margin-left: auto; display: flex; gap: 22px; }
 
+  @media (max-width: 960px) {
+    .hero { padding: 60px 0 64px; }
+    .hero-grid { grid-template-columns: 1fr; gap: 40px; }
+    .browser, .hero-shot:hover .browser { transform: none; }
+    .hero-shot::before { inset: 10% 0 0 0; }
+  }
   @media (max-width: 860px) {
     .steps, .grid3 { grid-template-columns: 1fr; }
     .feature, .feature.flip, .split { grid-template-columns: 1fr; gap: 26px; }
@@ -269,21 +295,23 @@
 </header>
 
 <div class="hero">
-  <div class="wrap hero-inner">
-    <h1><span class="dim">Traces tell you what happened.</span><br>AgentPulse tells you where to start investigating.</h1>
-    <p class="lead">An open-source reference implementation of drift investigation for multi-agent systems. When an outcome degrades, AgentPulse traces the drift upstream to the component where it originated: which agent drifted, why, and what to check next.</p>
-    <div class="cta">
-      <a class="btn btn-primary" href="https://calendly.com/nick-proveai/agent-pulse-demo">Set up a demo</a>
-      <a class="btn btn-ghost-dark" href="https://github.com/prove-ai/agentpulse">View on GitHub</a>
-    </div>
-  </div>
-  <div class="hero-shot">
-    <div class="browser">
-      <div class="browser-bar">
-        <span class="bdot r"></span><span class="bdot y"></span><span class="bdot g"></span>
-        <span class="url">localhost:5001 · demo</span>
+  <div class="wrap hero-grid">
+    <div class="hero-inner">
+      <h1><span class="dim">Traces tell you what happened.</span><br>AgentPulse tells you where to start investigating.</h1>
+      <p class="lead">An open-source reference implementation of drift investigation for multi-agent systems. When an outcome degrades, AgentPulse traces the drift upstream to the component where it originated: which agent drifted, why, and what to check next.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://calendly.com/nick-proveai/agent-pulse-demo">Set up a demo</a>
+        <a class="btn btn-ghost-dark" href="https://github.com/prove-ai/agentpulse">View on GitHub</a>
       </div>
-      <img src="screenshots/overview.png" alt="AgentPulse project overview showing 120 runs, success rate, an active drift signal, top signals, and version snapshots with per-version success and cost">
+    </div>
+    <div class="hero-shot">
+      <div class="browser">
+        <div class="browser-bar">
+          <span class="bdot r"></span><span class="bdot y"></span><span class="bdot g"></span>
+          <span class="url">localhost:5001 · demo</span>
+        </div>
+        <img src="screenshots/overview.png" alt="AgentPulse project overview showing 120 runs, success rate, an active drift signal, top signals, and version snapshots with per-version success and cost">
+      </div>
     </div>
   </div>
 </div>
