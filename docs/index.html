@@ -179,21 +179,33 @@
 
   /* features */
   .feature {
-    display: grid; grid-template-columns: 5fr 7fr; gap: 48px;
-    align-items: center; margin-top: 56px;
+    display: grid; grid-template-columns: 5.5fr 6.5fr; gap: 48px;
+    align-items: center; margin-top: 52px;
   }
-  .feature.flip { grid-template-columns: 7fr 5fr; }
+  .feature.flip { grid-template-columns: 6.5fr 5.5fr; }
   .feature.flip .txt { order: 2; }
   .feature.flip .shot { order: 1; }
+  .feature.solo { margin-top: 0; }
   .feature h3 { font-size: 21px; margin-bottom: 10px; letter-spacing: -0.01em; }
   .feature p { color: var(--ink-soft); font-size: 15.5px; }
-  .feature ul { margin: 14px 0 0 18px; color: var(--ink-soft); font-size: 15px; }
-  .feature li { margin-bottom: 6px; }
+  .feature ul { margin: 14px 0 0 18px; color: var(--ink-soft); font-size: 14.8px; }
+  .feature li { margin-bottom: 5px; }
+  .shot { position: relative; }
   .shot img {
     width: 100%; display: block; border-radius: var(--radius);
     border: 1px solid var(--line);
     box-shadow: 0 14px 40px rgba(16, 19, 26, .10);
   }
+  /* floating callout chips over screenshots */
+  .callout {
+    position: absolute; z-index: 2;
+    display: inline-flex; align-items: center; gap: 7px;
+    background: #fff; border: 1px solid var(--line); border-radius: 999px;
+    padding: 7px 13px; font-size: 12.5px; font-weight: 600; color: var(--ink);
+    box-shadow: 0 8px 24px rgba(16, 19, 26, .16); white-space: nowrap;
+  }
+  .callout .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .d-red { background: #e5484d; } .d-blue { background: var(--accent); } .d-amber { background: #f0a020; }
 
   /* claude / terminal */
   .split { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; margin-top: 40px; }
@@ -249,6 +261,7 @@
     .feature.flip .shot { order: 2; }
     nav .links a.plain { display: none; }
     section { padding: 56px 0; }
+    .callout { display: none; }
   }
   @media (max-width: 480px) {
     .tag { display: none; }
@@ -335,35 +348,50 @@ instrument(task_type=<span class="c">'my-system'</span>)</div>
     <div class="feature">
       <div class="txt">
         <h3>Drift Investigation</h3>
-        <p>Findings lead with the root cause. In the demo data: writer drifted after a prompt and model change, and critic's success dropped as a consequence. The fix belongs in writer, not critic.</p>
+        <p>Findings lead with the root cause, not the symptom. Here: writer drifted after a prompt change, and critic paid the price.</p>
         <ul>
           <li>Agent, handoff, and route drift detected separately</li>
-          <li>Severity escalates only with corroborating signals and a plausible change event</li>
-          <li>Suggested next checks per finding, deterministic or AI-generated</li>
+          <li>Severity backed by corroborating signals</li>
+          <li>Suggested next checks per finding</li>
         </ul>
       </div>
-      <div class="shot"><img src="screenshots/drift-investigation.png" alt="Drift Investigation view"></div>
+      <div class="shot">
+        <img src="screenshots/drift-focus.png" alt="Drift Investigation finding with related changes and suggested next checks">
+        <span class="callout" style="top: 7%; left: -16px;"><span class="dot d-red"></span>Root cause identified</span>
+        <span class="callout" style="top: 26%; right: -14px;"><span class="dot d-blue"></span>Prompt change correlated</span>
+      </div>
     </div>
+  </div>
+</section>
 
-    <div class="feature flip">
+<section class="band">
+  <div class="wrap">
+    <div class="feature flip solo">
       <div class="txt">
         <h3>See the run, not the logs</h3>
-        <p>A run is not a wall of log lines. Every run gets an execution timeline and an interactive agent-chain DAG: who ran in what order, what fanned out in parallel, and where the failure surfaced.</p>
+        <p>Every run is an execution timeline plus an interactive agent DAG, not a wall of log lines.</p>
         <ul>
-          <li>Gantt timeline with per-turn tokens, latency, and cost</li>
-          <li>Parallel fan-outs with bottleneck branch and join efficiency</li>
-          <li>Hover any handoff for payload size, receiver outcome, and downstream success</li>
+          <li>Per-turn tokens, latency, and cost</li>
+          <li>Parallel fan-outs with the bottleneck branch</li>
+          <li>Handoff payload and outcome on hover</li>
         </ul>
       </div>
-      <div class="shot"><img src="screenshots/run-detail.png" alt="Run detail of a parallel workflow: execution timeline with overlapping agent turns and a fan-out agent chain DAG"></div>
+      <div class="shot">
+        <img src="screenshots/run-detail.png" alt="Run detail of a parallel workflow: execution timeline with overlapping agent turns and a fan-out agent chain DAG">
+        <span class="callout" style="top: 10%; right: -14px;"><span class="dot d-amber"></span>Bottleneck branch detected</span>
+      </div>
     </div>
+  </div>
+</section>
 
-    <div class="feature">
+<section>
+  <div class="wrap">
+    <div class="feature solo">
       <div class="txt">
         <h3>Metrics Explorer</h3>
-        <p>Chart any metric for any agent, handoff, or the whole system across runs, with baseline bands, version markers, custom metrics, and thresholds.</p>
+        <p>Chart any metric for any agent, handoff, or the whole system, with baseline bands, version markers, and custom thresholds.</p>
       </div>
-      <div class="shot"><img src="screenshots/metrics-explorer.png" alt="Metrics Explorer view"></div>
+      <div class="shot"><img src="screenshots/metrics-focus.png" alt="Metrics Explorer charts with baseline bands and version markers"></div>
     </div>
   </div>
 </section>
