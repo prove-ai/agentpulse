@@ -212,8 +212,14 @@
     content: ""; position: absolute; left: -2.5px; bottom: -3px;
     width: 6px; height: 6px; border-radius: 50%;
   }
+  .leader.h { height: 1px; }
+  .leader.h::after {
+    content: ""; position: absolute; left: -3px; top: -2.5px;
+    width: 6px; height: 6px; border-radius: 50%;
+  }
   .ld-red::after { background: #e5484d; }
   .ld-blue::after { background: var(--accent); }
+  .ld-ink::after { background: #3c4354; }
 
   /* claude / terminal */
   .split { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; margin-top: 40px; }
@@ -376,21 +382,22 @@ instrument(task_type=<span class="c">'my-system'</span>)</div>
   </div>
 </section>
 
-<section class="band">
+<section class="band" style="padding: 60px 0;">
   <div class="wrap">
     <div class="feature flip solo">
       <div class="txt">
         <h3>See the run, not the logs</h3>
-        <p>Every run is an execution timeline plus an interactive agent DAG, not a wall of log lines.</p>
+        <p>See every run as an execution timeline and interactive agent graph, not a wall of log lines.</p>
         <ul>
-          <li>Per-turn tokens, latency, and cost</li>
-          <li>Parallel fan-outs with the bottleneck branch</li>
-          <li>Handoff payload and outcome on hover</li>
+          <li>Tokens, latency, and cost for every turn</li>
+          <li>Parallel branches, bottlenecks, and join time</li>
+          <li>Handoff payloads and downstream outcomes on hover</li>
         </ul>
       </div>
       <div class="shot">
-        <img src="screenshots/run-detail.png" alt="Run detail of a parallel workflow: execution timeline with overlapping agent turns and a fan-out agent chain DAG">
-        <span class="callout" style="top: 75.5%; right: 1%;"><span class="dot d-amber"></span>Bottleneck branch</span>
+        <img src="screenshots/run-detail.png" alt="Run detail of a parallel workflow: execution timeline with overlapping agent turns and a fan-out agent graph">
+        <span class="callout co-out" style="top: 74%; right: -70px;">6.7s bottleneck branch</span>
+        <i class="leader h ld-ink co-out" style="top: 77.4%; left: 71%; right: -58px;"></i>
       </div>
     </div>
   </div>
