@@ -154,28 +154,85 @@
   h2 { font-size: clamp(24px, 3vw, 32px); letter-spacing: -0.015em; line-height: 1.2; font-weight: 720; }
   .sub { color: var(--ink-soft); margin-top: 12px; max-width: 640px; font-size: 16.5px; }
 
-  /* how it works */
-  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 40px; }
+/* how it works */
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 22px;
+    margin-top: 40px;
+  }
+
   .step {
-    border: 1px solid var(--line); border-radius: var(--radius);
-    padding: 26px 24px; background: #fff;
+    min-width: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 26px 24px;
+    background: #fff;
   }
+
   .step .num {
-    width: 30px; height: 30px; border-radius: 8px;
-    background: #eef2fd; color: var(--accent);
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 14.5px; margin-bottom: 14px;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    background: #eef2fd;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14.5px;
+    margin-bottom: 14px;
   }
-  .step h3 { font-size: 17.5px; margin-bottom: 8px; }
-  .step p { font-size: 14.8px; color: var(--ink-soft); }
+
+  .step h3 {
+    font-size: 17.5px;
+    margin-bottom: 8px;
+  }
+
+  .step p {
+    font-size: 14.8px;
+    color: var(--ink-soft);
+  }
+
   .code {
-    margin-top: 14px; background: var(--dark); color: #d5dcf0;
-    border-radius: 8px; padding: 14px 16px; font-size: 12.6px;
+    max-width: 100%;
+    margin-top: 14px;
+    background: var(--dark);
+    color: #d5dcf0;
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-size: 12.6px;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    overflow-x: auto; line-height: 1.55; white-space: pre;
+    overflow-x: auto;
+    line-height: 1.55;
+    white-space: pre;
   }
-  .code .c { color: #7d879f; }
-  .code .k { color: #8ab4ff; }
+
+  .code .c {
+    color: #7d879f;
+  }
+
+  .code .k {
+    color: #8ab4ff;
+  }
+
+  @media (max-width: 1100px) {
+    .steps {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 640px) {
+    .steps {
+      grid-template-columns: 1fr;
+      gap: 16px;
+      margin-top: 28px;
+    }
+
+    .step {
+      padding: 22px 20px;
+    }
+  }
 
   /* features */
   .feature {
@@ -408,19 +465,24 @@
       <div class="step">
         <div class="num">1</div>
         <h3>Instrument</h3>
-        <p>Add two lines above your entrypoint. AgentPulse patches the OpenAI and Anthropic SDKs and hooks AutoGen and LangChain automatically.</p>
+        <p>Add two lines at startup. AgentPulse automatically instruments OpenAI, Anthropic, LangChain, and AutoGen.</p>
         <div class="code"><span class="k">from</span> sdk <span class="k">import</span> instrument
 instrument(task_type=<span class="c">'my-system'</span>)</div>
       </div>
       <div class="step">
         <div class="num">2</div>
         <h3>Capture</h3>
-        <p>Every LLM call, agent turn, tool call, and handoff is written to a plain SQLite file per project. No server, no daemon, no cloud, no API keys.</p>
+        <p>LLM calls, agent turns, tool calls, and handoffs are stored locally in one SQLite file per project. Core tracing works without an AgentPulse cloud account or hosted backend.</p>
       </div>
       <div class="step">
         <div class="num">3</div>
+        <h3>Detect drift</h3>
+        <p>AgentPulse compares behavior across runs and versions, then flags agent, handoff, and route drift when signals leave their expected range.</p>
+      </div>
+      <div class="step">
+        <div class="num">4</div>
         <h3>Investigate</h3>
-        <p>When an outcome breaches, the drift engine walks the handoff graph upstream and presents the causal path with severity, confidence, and next checks.</p>
+        <p>Follow the drift upstream to its likely source, with supporting signals, related changes, confidence, and suggested next checks.</p>
       </div>
     </div>
   </div>
@@ -433,7 +495,7 @@ instrument(task_type=<span class="c">'my-system'</span>)</div>
     <p class="sub">When an outcome degrades, AgentPulse does not hand you a dashboard of symptoms. It compares every component against your baseline and walks the agent graph to the point where the drift originated.</p>
 
     <div class="invest">
-      <div class="inv-head">The investigation path <span>· demo project, run 18</span></div>
+      <div class="inv-head">The investigation path</div>
       <div class="trace-wrap">
         <div class="trace">
           <span class="backtrace"></span>
