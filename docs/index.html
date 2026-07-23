@@ -220,15 +220,7 @@
     font-size: 13px; color: var(--accent); font-weight: 600; white-space: nowrap;
   }
 
-  /* open source band */
   .band { background: var(--bg-soft); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 36px; }
-  .cell {
-    background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
-    padding: 22px 22px;
-  }
-  .cell h4 { font-size: 15.5px; margin-bottom: 6px; }
-  .cell p { font-size: 14.2px; color: var(--ink-soft); }
 
   /* final CTA */
   .final { background: var(--dark); color: #fff; text-align: center; }
@@ -251,7 +243,7 @@
     .hero-shot::before { inset: 10% 0 0 0; }
   }
   @media (max-width: 860px) {
-    .steps, .grid3 { grid-template-columns: 1fr; }
+    .steps { grid-template-columns: 1fr; }
     .feature, .feature.flip, .split { grid-template-columns: 1fr; gap: 26px; }
     .feature.flip .txt { order: 1; }
     .feature.flip .shot { order: 2; }
@@ -356,14 +348,14 @@ instrument(task_type=<span class="c">'my-system'</span>)</div>
     <div class="feature flip">
       <div class="txt">
         <h3>See the run, not the logs</h3>
-        <p>A run is not a wall of log lines. Every run gets an execution timeline and an interactive agent-chain DAG: who ran in what order, how long each turn took, and where the failure surfaced.</p>
+        <p>A run is not a wall of log lines. Every run gets an execution timeline and an interactive agent-chain DAG: who ran in what order, what fanned out in parallel, and where the failure surfaced.</p>
         <ul>
           <li>Gantt timeline with per-turn tokens, latency, and cost</li>
+          <li>Parallel fan-outs with bottleneck branch and join efficiency</li>
           <li>Hover any handoff for payload size, receiver outcome, and downstream success</li>
-          <li>Per-run anomalies against each agent's usual behaviour</li>
         </ul>
       </div>
-      <div class="shot"><img src="screenshots/run-detail.png" alt="Run detail view with execution timeline and agent chain DAG"></div>
+      <div class="shot"><img src="screenshots/run-detail.png" alt="Run detail of a parallel workflow: execution timeline with overlapping agent turns and a fan-out agent chain DAG"></div>
     </div>
 
     <div class="feature">
@@ -399,28 +391,6 @@ instrument(task_type=<span class="c">'my-system'</span>)</div>
         <div class="tool"><code>get_todays_finding</code><span>Active drift findings as root-cause-led investigation cards</span></div>
         <div class="tool"><code>get_version_comparison</code><span>Which release introduced the change that broke an outcome</span></div>
         <div class="tool"><code>get_next_check_steps</code><span>Recommended next investigation steps per finding</span></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <div class="kicker">Open source</div>
-    <h2>Built to be reused, not just run</h2>
-    <p class="sub">MIT licensed. Even if you never deploy AgentPulse, the design decisions carry over to any in-house observability build.</p>
-    <div class="grid3">
-      <div class="cell">
-        <h4>Three kinds of drift</h4>
-        <p>Agent behaviour, handoff, and route drift are different failure classes with different signals, detected separately.</p>
-      </div>
-      <div class="cell">
-        <h4>Upstream origination</h4>
-        <p>Walk the handoff graph upstream from the symptom and stop where input is stable but output drifted. That is where the fix belongs.</p>
-      </div>
-      <div class="cell">
-        <h4>Corroborated severity</h4>
-        <p>An outcome breach escalates only when co-timed signals and a plausible change event line up. Lone metrics stay candidates.</p>
       </div>
     </div>
   </div>
