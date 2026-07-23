@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentPulse: drift investigation for multi-agent systems</title>
+<meta name="description" content="Open-source reference implementation of drift investigation for multi-agent systems: which agent drifted, where it originated, and what to check next.">
+<meta property="og:title" content="AgentPulse">
+<meta property="og:description" content="Traces tell you what happened. AgentPulse tells you where to start investigating.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://prove-ai.github.io/agentpulse/screenshots/drift-investigation.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f56e0'/%3E%3Cpath d='M5 17h5l3-8 4 14 3-6h7' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --accent: #2f56e0;
+    --accent-dark: #2445bd;
+    --ink: #10131a;
+    --ink-soft: #3c4354;
+    --muted: #6b7285;
+    --line: #e4e7ee;
+    --bg-soft: #f6f8fb;
+    --dark: #0e1116;
+    --dark-2: #141926;
+    --radius: 12px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { overflow-x: hidden; }
+  /* let grid children shrink so code/terminal blocks scroll inside instead of
+     widening the page on small screens */
+  .steps > *, .split > *, .feature > *, .grid3 > * { min-width: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    background: #fff;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 0 24px; }
+  a { color: var(--accent); text-decoration: none; }
+
+  /* ---- buttons ---- */
+  .btn {
+    display: inline-block;
+    padding: 12px 22px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 15.5px;
+    line-height: 1.2;
+    transition: background .15s, border-color .15s, color .15s;
+    white-space: nowrap;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-dark); }
+  .btn-ghost-dark { border: 1px solid #39415a; color: #dbe1f0; }
+  .btn-ghost-dark:hover { border-color: #98a5c9; color: #fff; }
+  .btn-ghost-light { border: 1px solid var(--line); color: var(--ink); }
+  .btn-ghost-light:hover { border-color: var(--muted); }
+
+  /* ---- nav ---- */
+  header {
+    background: var(--dark);
+    border-bottom: 1px solid #1d2434;
+  }
+  nav {
+    display: flex; align-items: center; gap: 28px;
+    padding: 18px 0;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 700; font-size: 18px; }
+  .brand svg { display: block; }
+  .tag {
+    font-size: 11.5px; font-weight: 600; letter-spacing: .04em;
+    color: #9fb2e8; border: 1px solid #2c3a5c;
+    padding: 2px 8px; border-radius: 99px;
+  }
+  nav .links { margin-left: auto; display: flex; align-items: center; gap: 22px; }
+  nav .links a { color: #b9c1d4; font-size: 14.5px; font-weight: 500; }
+  nav .links a:hover { color: #fff; }
+  nav .links .btn { padding: 9px 16px; font-size: 14px; }
+
+  /* ---- hero ---- */
+  .hero { background: var(--dark); color: #fff; padding: 72px 0 0; overflow: hidden; }
+  .hero-inner { max-width: 780px; }
+  h1 {
+    font-size: clamp(30px, 4.6vw, 46px);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    font-weight: 750;
+  }
+  h1 .dim { color: #8d97b3; }
+  .hero p.lead {
+    margin: 22px 0 30px;
+    font-size: 18px;
+    color: #b9c1d4;
+    max-width: 640px;
+  }
+  .hero .cta { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .hero .note { margin-top: 18px; font-size: 13.5px; color: #7d879f; }
+  .hero-shot {
+    margin: 48px auto -2px;
+    max-width: 1060px; padding: 0 24px;
+  }
+  .hero-shot img {
+    display: block; width: 100%;
+    border-radius: 12px 12px 0 0;
+    border: 1px solid #2a3247; border-bottom: none;
+    box-shadow: 0 -8px 60px rgba(47, 86, 224, .18);
+  }
+
+  /* ---- works-with strip ---- */
+  .strip { border-bottom: 1px solid var(--line); background: #fff; }
+  .strip .wrap {
+    display: flex; flex-wrap: wrap; gap: 10px 26px;
+    align-items: center; justify-content: center;
+    padding: 20px 24px; font-size: 14px; color: var(--muted); font-weight: 500;
+  }
+  .strip span.lbl { font-size: 12.5px; text-transform: uppercase; letter-spacing: .08em; color: #9aa1b3; }
+
+  /* ---- sections ---- */
+  section { padding: 76px 0; }
+  .kicker {
+    font-size: 13px; font-weight: 700; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 10px;
+  }
+  h2 { font-size: clamp(24px, 3vw, 32px); letter-spacing: -0.015em; line-height: 1.2; font-weight: 720; }
+  .sub { color: var(--ink-soft); margin-top: 12px; max-width: 640px; font-size: 16.5px; }
+
+  /* how it works */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 40px; }
+  .step {
+    border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 26px 24px; background: #fff;
+  }
+  .step .num {
+    width: 30px; height: 30px; border-radius: 8px;
+    background: #eef2fd; color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 14.5px; margin-bottom: 14px;
+  }
+  .step h3 { font-size: 17.5px; margin-bottom: 8px; }
+  .step p { font-size: 14.8px; color: var(--ink-soft); }
+  .code {
+    margin-top: 14px; background: var(--dark); color: #d5dcf0;
+    border-radius: 8px; padding: 14px 16px; font-size: 12.6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    overflow-x: auto; line-height: 1.55; white-space: pre;
+  }
+  .code .c { color: #7d879f; }
+  .code .k { color: #8ab4ff; }
+
+  /* features */
+  .feature {
+    display: grid; grid-template-columns: 5fr 7fr; gap: 48px;
+    align-items: center; margin-top: 56px;
+  }
+  .feature.flip { grid-template-columns: 7fr 5fr; }
+  .feature.flip .txt { order: 2; }
+  .feature.flip .shot { order: 1; }
+  .feature h3 { font-size: 21px; margin-bottom: 10px; letter-spacing: -0.01em; }
+  .feature p { color: var(--ink-soft); font-size: 15.5px; }
+  .feature ul { margin: 14px 0 0 18px; color: var(--ink-soft); font-size: 15px; }
+  .feature li { margin-bottom: 6px; }
+  .shot img {
+    width: 100%; display: block; border-radius: var(--radius);
+    border: 1px solid var(--line);
+    box-shadow: 0 14px 40px rgba(16, 19, 26, .10);
+  }
+
+  /* claude / terminal */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; margin-top: 40px; }
+  .term {
+    background: var(--dark); border-radius: var(--radius);
+    padding: 18px 20px 22px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12.8px; line-height: 1.6; color: #c9d1e3;
+    border: 1px solid #232b3f; overflow-x: auto;
+  }
+  .term .bar { display: flex; gap: 6px; margin-bottom: 14px; }
+  .term .dot { width: 10px; height: 10px; border-radius: 50%; background: #2b344b; }
+  .term .u { color: #8ab4ff; }
+  .term .hl { color: #fff; font-weight: 600; }
+  .term .sev { color: #ff7b7b; font-weight: 600; }
+  .term .dim { color: #7d879f; }
+  .tools { margin-top: 18px; display: grid; gap: 10px; }
+  .tool {
+    display: flex; gap: 12px; align-items: baseline;
+    border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px;
+    font-size: 14.5px; color: var(--ink-soft);
+  }
+  .tool code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px; color: var(--accent); font-weight: 600; white-space: nowrap;
+  }
+
+  /* open source band */
+  .band { background: var(--bg-soft); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 36px; }
+  .cell {
+    background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 22px 22px;
+  }
+  .cell h4 { font-size: 15.5px; margin-bottom: 6px; }
+  .cell p { font-size: 14.2px; color: var(--ink-soft); }
+
+  /* final CTA */
+  .final { background: var(--dark); color: #fff; text-align: center; }
+  .final h2 { color: #fff; }
+  .final p { color: #b9c1d4; margin: 14px auto 30px; max-width: 560px; }
+  .final .cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .final .mail { margin-top: 20px; font-size: 14px; color: #7d879f; }
+  .final .mail a { color: #b9c1d4; }
+
+  footer { background: var(--dark); border-top: 1px solid #1d2434; padding: 26px 0; }
+  footer .wrap {
+    display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: center;
+    color: #7d879f; font-size: 13.5px;
+  }
+  footer a { color: #b9c1d4; }
+  footer .right { margin-left: auto; display: flex; gap: 22px; }
+
+  @media (max-width: 860px) {
+    .steps, .grid3 { grid-template-columns: 1fr; }
+    .feature, .feature.flip, .split { grid-template-columns: 1fr; gap: 26px; }
+    .feature.flip .txt { order: 1; }
+    .feature.flip .shot { order: 2; }
+    nav .links a.plain { display: none; }
+    section { padding: 56px 0; }
+  }
+  @media (max-width: 480px) {
+    .tag { display: none; }
+    .term { font-size: 11.5px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <nav>
+      <span class="brand">
+        <svg width="26" height="26" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#2f56e0"/><path d="M5 17h5l3-8 4 14 3-6h7" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        AgentPulse
+        <span class="tag">OPEN SOURCE</span>
+      </span>
+      <span class="links">
+        <a class="plain" href="#how">How it works</a>
+        <a class="plain" href="#features">Features</a>
+        <a class="plain" href="https://github.com/prove-ai/agentpulse">GitHub</a>
+        <a class="btn btn-primary" href="https://calendly.com/nick-proveai/agent-pulse-demo">Set up a demo</a>
+      </span>
+    </nav>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap hero-inner">
+    <h1>Traces tell you what happened.<br><span class="dim">AgentPulse tells you where to start investigating.</span></h1>
+    <p class="lead">An open-source reference implementation of drift investigation for multi-agent systems. When an outcome degrades, AgentPulse traces the drift upstream to the component where it originated: which agent drifted, why, and what to check next.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://calendly.com/nick-proveai/agent-pulse-demo">Set up a demo</a>
+      <a class="btn btn-ghost-dark" href="https://github.com/prove-ai/agentpulse">View on GitHub</a>
+    </div>
+    <p class="note">MIT licensed. Runs locally; your runs stay in SQLite on your machine.</p>
+  </div>
+  <div class="hero-shot">
+    <img src="screenshots/drift-investigation.png" alt="AgentPulse Drift Investigation view showing a critical finding on the writer agent, the metrics that changed, related prompt and model changes, and suggested next checks">
+  </div>
+</div>
+
+<div class="strip">
+  <div class="wrap">
+    <span class="lbl">Works with</span>
+    <span>OpenAI SDK</span><span>Anthropic SDK</span><span>AutoGen</span><span>LangChain</span><span>LangGraph</span><span>Claude Code (MCP)</span>
+  </div>
+</div>
+
+<section id="how">
+  <div class="wrap">
+    <div class="kicker">How it works</div>
+    <h2>Two lines in, an investigation out</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="num">1</div>
+        <h3>Instrument</h3>
+        <p>Add two lines above your entrypoint. AgentPulse patches the OpenAI and Anthropic SDKs and hooks AutoGen and LangChain automatically.</p>
+        <div class="code"><span class="k">from</span> sdk <span class="k">import</span> instrument
+instrument(task_type=<span class="c">'my-system'</span>)</div>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <h3>Capture</h3>
+        <p>Every LLM call, agent turn, tool call, and handoff is written to a plain SQLite file per project. No server, no daemon, no cloud, no API keys.</p>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <h3>Investigate</h3>
+        <p>When an outcome breaches, the drift engine walks the handoff graph upstream and presents the causal path with severity, confidence, and next checks.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="features" style="padding-top: 0;">
+  <div class="wrap">
+    <div class="kicker">What you get</div>
+    <h2>Built around the investigation, not the trace viewer</h2>
+
+    <div class="feature">
+      <div class="txt">
+        <h3>Drift Investigation</h3>
+        <p>Findings lead with the root cause. In the demo data: writer drifted after a prompt and model change, and critic's success dropped as a consequence. The fix belongs in writer, not critic.</p>
+        <ul>
+          <li>Agent, handoff, and route drift detected separately</li>
+          <li>Severity escalates only with corroborating signals and a plausible change event</li>
+          <li>Suggested next checks per finding, deterministic or AI-generated</li>
+        </ul>
+      </div>
+      <div class="shot"><img src="screenshots/drift-investigation.png" alt="Drift Investigation view"></div>
+    </div>
+
+    <div class="feature flip">
+      <div class="txt">
+        <h3>Run Explorer</h3>
+        <p>Every run with status, route, and cost. Click through to an execution timeline, the interactive agent-chain DAG, and anomalies against your own baseline.</p>
+      </div>
+      <div class="shot"><img src="screenshots/run-history.png" alt="Run history view"></div>
+    </div>
+
+    <div class="feature">
+      <div class="txt">
+        <h3>Metrics Explorer</h3>
+        <p>Chart any metric for any agent, handoff, or the whole system across runs, with baseline bands, version markers, custom metrics, and thresholds.</p>
+      </div>
+      <div class="shot"><img src="screenshots/metrics-explorer.png" alt="Metrics Explorer view"></div>
+    </div>
+  </div>
+</section>
+
+<section class="band">
+  <div class="wrap">
+    <div class="kicker">Claude integration</div>
+    <h2>Let Claude run the investigation</h2>
+    <p class="sub">AgentPulse ships an MCP server, so Claude Code and Claude Desktop can triage drift, compare releases, and propose next checks conversationally. Three ready-made skills are bundled.</p>
+    <div class="split">
+      <div class="term">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <div><span class="u">&gt; what drifted today?</span></div>
+        <div>&nbsp;</div>
+        <div><span class="hl">1 drift finding</span> <span class="dim">across 3 projects</span></div>
+        <div>&nbsp;</div>
+        <div><span class="sev">● writer</span> · Agent behaviour · <span class="dim">demo</span></div>
+        <div>&nbsp;&nbsp;Severity: <span class="sev">Critical</span> &nbsp;Confidence: High</div>
+        <div>&nbsp;&nbsp;<span class="dim">Why:</span> a change in writer propagated downstream</div>
+        <div>&nbsp;&nbsp;to critic, whose success worsened. The fix</div>
+        <div>&nbsp;&nbsp;belongs in writer, not critic.</div>
+        <div>&nbsp;&nbsp;<span class="dim">Trigger:</span> writer prompt changed near run 110</div>
+      </div>
+      <div class="tools">
+        <div class="tool"><code>get_todays_finding</code><span>Active drift findings as root-cause-led investigation cards</span></div>
+        <div class="tool"><code>get_version_comparison</code><span>Which release introduced the change that broke an outcome</span></div>
+        <div class="tool"><code>get_next_check_steps</code><span>Recommended next investigation steps per finding</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker">Open source</div>
+    <h2>Built to be reused, not just run</h2>
+    <p class="sub">MIT licensed. Even if you never deploy AgentPulse, the design decisions carry over to any in-house observability build.</p>
+    <div class="grid3">
+      <div class="cell">
+        <h4>Three kinds of drift</h4>
+        <p>Agent behaviour, handoff, and route drift are different failure classes with different signals, detected separately.</p>
+      </div>
+      <div class="cell">
+        <h4>Upstream origination</h4>
+        <p>Walk the handoff graph upstream from the symptom and stop where input is stable but output drifted. That is where the fix belongs.</p>
+      </div>
+      <div class="cell">
+        <h4>Corroborated severity</h4>
+        <p>An outcome breach escalates only when co-timed signals and a plausible change event line up. Lone metrics stay candidates.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="final">
+  <div class="wrap">
+    <h2>See it on your own agents</h2>
+    <p>Book a 30-minute walkthrough of a real drift investigation, or ask how to wire AgentPulse into your stack.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://calendly.com/nick-proveai/agent-pulse-demo">Set up a demo</a>
+      <a class="btn btn-ghost-dark" href="https://github.com/prove-ai/agentpulse">View on GitHub</a>
+    </div>
+    <p class="mail">Prefer email? <a href="mailto:leyla@proveai.com">leyla@proveai.com</a></p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>© 2026 Prove AI · MIT License</span>
+    <span class="right">
+      <a href="https://github.com/prove-ai/agentpulse">GitHub</a>
+      <a href="https://github.com/prove-ai/agentpulse/issues">Issues</a>
+      <a href="mailto:leyla@proveai.com">Contact</a>
+    </span>
+  </div>
+</footer>
+
+</body>
+</html>
