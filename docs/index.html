@@ -118,7 +118,8 @@
     color: #b9c1d4;
   }
   .hero p.lead .hl { color: #9db6ff; font-weight: 600; }
-  .hero .cta { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .hero .cta { display: flex; flex-direction: column; align-items: stretch; gap: 14px; width: max-content; max-width: 100%; }
+  .hero .cta .btn { text-align: center; }
   .hero-shot { position: relative; }
   /* soft glow behind the card */
   .hero-shot::before {
