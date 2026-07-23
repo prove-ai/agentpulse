@@ -379,6 +379,25 @@
   .final h2 { color: #fff; }
   .final p { color: #b9c1d4; margin: 14px auto 30px; max-width: 560px; }
   .final .cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .final .feedback-note {
+    margin: 40px auto 0; max-width: 600px;
+    padding-top: 30px; border-top: 1px solid #232b3f;
+    color: #b9c1d4; font-size: 15px; line-height: 1.55;
+  }
+  .final .feedback-note .tag-fb {
+    display: inline-block; margin-bottom: 12px;
+    font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    color: #9db6ff; background: rgba(47, 86, 224, .16); border: 1px solid #2c3a5c;
+    padding: 3px 11px; border-radius: 99px;
+  }
+  .final .feedback-note p { color: #b9c1d4; margin: 0 auto 18px; }
+  .btn-discussion {
+    display: inline-flex; align-items: center; gap: 8px;
+    border: 1px solid #39415a; color: #dbe1f0;
+    padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 14.5px;
+    transition: border-color .15s, color .15s;
+  }
+  .btn-discussion:hover { border-color: #98a5c9; color: #fff; }
 
   footer { background: var(--dark); border-top: 1px solid #1d2434; padding: 26px 0; }
   footer .wrap {
@@ -590,6 +609,11 @@ instrument(task_type=<span class="c">'my-system'</span>)</div>
       <a class="btn btn-primary" href="https://calendly.com/nick-proveai/agent-pulse-demo">Get started free</a>
       <a class="btn btn-ghost-dark" href="https://github.com/prove-ai/agentpulse">Chat with our engineers</a>
     </div>
+    <div class="feedback-note">
+      <span class="tag-fb">Open experiment</span>
+      <p>AgentPulse is a reference implementation, and we want to learn how your team investigates agent failures. Tell us what works, what's missing, or how you do it differently.</p>
+      <a class="btn-discussion" href="https://github.com/prove-ai/agentpulse/discussions">💬&nbsp; Share feedback in Discussions&nbsp; →</a>
+    </div>
   </div>
 </section>
 
@@ -598,6 +622,7 @@ instrument(task_type=<span class="c">'my-system'</span>)</div>
     <span>© 2026 Prove AI · MIT License</span>
     <span class="right">
       <a href="https://github.com/prove-ai/agentpulse">GitHub</a>
+      <a href="https://github.com/prove-ai/agentpulse/discussions">Discussions</a>
       <a href="https://github.com/prove-ai/agentpulse/issues">Issues</a>
       <a href="mailto:leyla@proveai.com">Contact</a>
     </span>
