@@ -418,7 +418,7 @@
     .feature, .feature.flip, .split { grid-template-columns: 1fr; gap: 26px; }
     .feature.flip .txt { order: 1; }
     .feature.flip .shot { order: 2; }
-    nav .links a.plain { display: none; }
+    nav .links a.plain, .nav-feedback { display: none; }
     section { padding: 56px 0; }
     .callout, .leader { display: none; }
   }
@@ -446,6 +446,7 @@
         <a class="plain" href="#features">Features</a>
         <a class="plain" href="https://github.com/prove-ai/agentpulse">GitHub</a>
         <a class="btn btn-primary" href="https://calendly.com/nick-proveai/agent-pulse-demo">Chat with our engineers</a>
+        <a class="btn btn-ghost-dark nav-feedback" href="https://github.com/prove-ai/agentpulse/discussions">Share feedback</a>
       </span>
     </nav>
   </div>
@@ -612,7 +613,7 @@ instrument(task_type=<span class="c">'my-system'</span>)</div>
     <div class="feedback-note">
       <span class="tag-fb">Open experiment</span>
       <p>AgentPulse is a reference implementation, and we want to learn how your team investigates agent failures. Tell us what works, what's missing, or how you do it differently.</p>
-      <a class="btn-discussion" href="https://github.com/prove-ai/agentpulse/discussions">💬&nbsp; Share feedback in Discussions&nbsp; →</a>
+      <a class="btn-discussion" href="https://github.com/prove-ai/agentpulse/discussions">Share feedback in Discussions&nbsp; →</a>
     </div>
   </div>
 </section>
