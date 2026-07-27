@@ -1579,3 +1579,31 @@ body[data-section="start"]         .ambient { filter: hue-rotate(80deg); }   /* 
 @media (max-width: 700px) {
   .final-inner { padding: 56px 20px 48px; }
 }
+
+
+/* ============================================================
+   last page: header and footer go black to match the CTA band
+   (driven by body[data-section="start"], set by the dot nav)
+   ============================================================ */
+body[data-section="start"] .site-header[data-scrolled="true"] {
+  background: rgba(10, 13, 24, 0.94);
+  border-bottom-color: #1c2334;
+}
+body[data-section="start"] .site-header {
+  --fg: #f4f6fb;
+  --fg-soft: #b7c0d4;
+}
+body[data-section="start"] .site-header .text-white { color: #fff; }
+body[data-section="start"] .site-header .rounded-full {
+  color: #9fb2e8;
+  border-color: #2c3a5c;
+}
+
+.site-footer { transition: background 0.4s ease, border-color 0.4s ease; }
+body[data-section="start"] .site-footer {
+  background: #0a0d18;
+  border-top-color: #1c2334;
+}
+body[data-section="start"] .footer-inner { color: #5a6273; }
+body[data-section="start"] .footer-links a { color: #7c8598; }
+body[data-section="start"] .footer-links a:hover { color: #fff; }
