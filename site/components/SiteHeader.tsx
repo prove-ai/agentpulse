@@ -33,7 +33,7 @@ export default function SiteHeader() {
             OPEN SOURCE
           </span>
         </Link>
-        <nav className="flex items-center gap-7 justify-self-center text-[14px] font-medium text-[var(--fg-soft)]">
+        <nav className="flex items-center gap-14 justify-self-center text-[14px] font-medium text-[var(--fg-soft)]">
           <Link className="hidden transition-colors hover:text-white sm:block" href="/#console">
             Features
           </Link>
