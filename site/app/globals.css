@@ -1540,14 +1540,13 @@ body[data-section="start"]         .ambient { filter: hue-rotate(80deg); }   /* 
    05 // get started — the words sit in a dark card centered on
    the light page, not a full dark section
    ============================================================ */
-/* full-width black band, sized to its words — page stays light above/below */
+/* the whole final page is black — band, section, and bars merge */
+.final { background: #0a0d18; }
 .final-inner {
   width: 100vw;
   max-width: 100vw;
   margin: 0;
   background: #0a0d18;
-  border-top: 1px solid #1c2334;
-  border-bottom: 1px solid #1c2334;
   padding: 88px 28px 76px;
 }
 /* dark palette inside the card, regardless of the light page */
