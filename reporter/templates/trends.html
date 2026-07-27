@@ -4,87 +4,87 @@
 {% block content %}
 <style>
   /* --- Page-level --- */
-  .filter-bar { background: white; border-radius: 8px; padding: 12px 16px;
-                box-shadow: 0 1px 4px rgba(0,0,0,.07); }
-  .chip-link  { display: inline-block; background: #eef0f6; color: #3a3f55;
+  .filter-bar { background: #131523; border-radius: 8px; padding: 12px 16px;
+                box-shadow: 0 1px 4px rgba(0,0,0,0.14); }
+  .chip-link  { display: inline-block; background: #12192f; color: #c4c7d6;
                 border-radius: 14px; padding: 3px 12px; font-size: .78rem;
                 font-weight: 600; text-decoration: none; margin-right: 4px; }
-  .chip-link.active { background: #e1e7fb; color: #1a3d8a; }
+  .chip-link.active { background: #131a33; color: #285dd3; }
 
   /* --- Soft summary boxes --- */
-  .summary-box { background:white; border-radius:8px; padding:12px;
-                 box-shadow:0 1px 4px rgba(0,0,0,.07); text-align:center;
+  .summary-box { background:#131523; border-radius:8px; padding:12px;
+                 box-shadow:0 1px 4px rgba(0,0,0,0.14); text-align:center;
                  height:100%; }
   .summary-box .val { font-size:1.5rem; font-weight:700; line-height:1.1; }
-  .summary-box .lbl { font-size:.68rem; color:#6c757d; text-transform:uppercase;
+  .summary-box .lbl { font-size:.68rem; color:#8b949b; text-transform:uppercase;
                       letter-spacing:.4px; margin-top:3px; }
-  .summary-box .sub { font-size:.7rem; color:#9aa0ab; margin-top:2px; }
+  .summary-box .sub { font-size:.7rem; color:#bbbfc7; margin-top:2px; }
 
   /* --- Agent Health cards --- */
-  .health-card { background:white; border-radius:10px; padding:16px 18px;
-                 box-shadow:0 2px 8px rgba(0,0,0,.07); height:100%;
+  .health-card { background:#131523; border-radius:10px; padding:16px 18px;
+                 box-shadow:0 2px 8px rgba(0,0,0,0.14); height:100%;
                  border-left:5px solid transparent; }
   .health-card.stable   { border-left-color:#28a745; }
-  .health-card.watch    { border-left-color:#f0ad4e; }
+  .health-card.watch    { border-left-color:#76582d; }
   .health-card.drifting { border-left-color:#dc3545; }
-  .health-name { font-weight:700; font-size:1.02rem; color:#1a1a2e;
+  .health-name { font-weight:700; font-size:1.02rem; color:#c9cfe6;
                  margin-bottom:2px; }
-  .health-sub  { font-size:.72rem; color:#8a90a0; margin-bottom:12px; }
+  .health-sub  { font-size:.72rem; color:#acb0bb; margin-bottom:12px; }
   .health-eff  { display:flex; align-items:baseline; gap:8px; margin-bottom:10px; }
-  .health-eff .num { font-size:1.7rem; font-weight:700; color:#1a1a2e;
+  .health-eff .num { font-size:1.7rem; font-weight:700; color:#c9cfe6;
                      font-variant-numeric: tabular-nums; }
-  .health-eff .unit{ font-size:.72rem; color:#8a90a0; }
+  .health-eff .unit{ font-size:.72rem; color:#acb0bb; }
   .health-delta    { font-size:.78rem; font-weight:600; }
-  .health-delta.up   { color:#dc3545; }
-  .health-delta.down { color:#28a745; }
-  .health-delta.flat { color:#8a90a0; }
+  .health-delta.up   { color:#e87d87; }
+  .health-delta.down { color:#50d56f; }
+  .health-delta.flat { color:#acb0bb; }
   .mini-signals { display:flex; flex-wrap:wrap; gap:5px; margin-top:6px; }
-  .mini-sig { background:#f4f6fa; color:#5a6072; border-radius:10px;
+  .mini-sig { background:#10192b; color:#b8bbc7; border-radius:10px;
               padding:2px 8px; font-size:.7rem; font-weight:500; }
-  .mini-sig.drifted { background:#ffe2cc; color:#8a4b00; font-weight:600; }
-  .issue-note { background:#fff8e1; border:1px solid #ffe082; border-radius:6px;
-                padding:7px 10px; font-size:.78rem; color:#6b5a00; margin-top:10px; }
+  .mini-sig.drifted { background:#392516; color:#e17a00; font-weight:600; }
+  .issue-note { background:#312a13; border:1px solid #76642d; border-radius:6px;
+                padding:7px 10px; font-size:.78rem; color:#c2a300; margin-top:10px; }
 
   /* --- Unified handoff card (used by BOTH drift suspects and common) --- */
-  .ho-card { background:white; border-radius:10px; padding:18px 20px;
-             box-shadow:0 2px 8px rgba(0,0,0,.07); height:100%;
-             border-left:5px solid #e6e8ef;
+  .ho-card { background:#131523; border-radius:10px; padding:18px 20px;
+             box-shadow:0 2px 8px rgba(0,0,0,0.14); height:100%;
+             border-left:5px solid #202537;
              display:flex; flex-direction:column; gap:0; }
   .ho-card.risk-high   { border-left-color:#dc3545; }
-  .ho-card.risk-medium { border-left-color:#f0ad4e; }
+  .ho-card.risk-medium { border-left-color:#76582d; }
   .ho-card.risk-low    { border-left-color:#28a745; }
-  .ho-card.volume      { border-left-color:#9ab2e8; }   /* common-handoff variant */
+  .ho-card.volume      { border-left-color:#2d4376; }   /* common-handoff variant */
   .ho-card.status-critical { border-left-color:#8a1f1f; }   /* Critical    — dark red */
   .ho-card.status-high     { border-left-color:#dc3545; }   /* High risk   — red */
   .ho-card.status-medium   { border-left-color:#e0871a; }   /* Medium risk — orange */
   .ho-card.status-watch    { border-left-color:#d6b41e; }   /* Watch       — yellow */
   .ho-card.status-stable   { border-left-color:#28a745; }   /* Stable      — green */
-  .ho-card.status-info     { border-left-color:#c2c7d0; }   /* single-half info card */
+  .ho-card.status-info     { border-left-color:#3f4756; }   /* single-half info card */
 
   /* Path summary mini-cards */
-  .path-val   { font-size:1.5rem; font-weight:700; color:#1a1a2e; line-height:1.1;
+  .path-val   { font-size:1.5rem; font-weight:700; color:#c9cfe6; line-height:1.1;
                 margin-top:6px; font-variant-numeric:tabular-nums; }
-  .path-unit  { font-size:.7rem; color:#8a90a0; font-weight:500; }
-  .path-delta { font-size:.8rem; font-weight:600; color:#5a6072; margin-top:2px; }
-  .path-route { font-size:.9rem; font-weight:700; color:#1a1a2e; margin-top:6px;
+  .path-unit  { font-size:.7rem; color:#acb0bb; font-weight:500; }
+  .path-delta { font-size:.8rem; font-weight:600; color:#b8bbc7; margin-top:2px; }
+  .path-route { font-size:.9rem; font-weight:700; color:#c9cfe6; margin-top:6px;
                 line-height:1.3; word-break:break-word; }
-  .path-route .arrow { color:#8a90a0; margin:0 3px; }
+  .path-route .arrow { color:#acb0bb; margin:0 3px; }
   /* Full-chain hover popover */
   .route-hover { position:relative; cursor:help; }
   .chain-pop { display:none; position:absolute; z-index:60; top:100%; left:0;
                margin-top:6px; background:#1a1a2e; color:#f0f0ff;
                border-radius:8px; padding:10px 14px; min-width:160px;
-               box-shadow:0 8px 22px rgba(0,0,0,.28); }
+               box-shadow:0 8px 22px rgba(0,0,0,0.56); }
   .route-hover:hover .chain-pop { display:block; }
   .chain-pop-title { font-size:.66rem; text-transform:uppercase; letter-spacing:.5px;
-                     color:#9aa0c7; margin-bottom:6px; }
+                     color:#bdc1db; margin-bottom:6px; }
   .chain-step  { font-size:.84rem; font-weight:600; }
-  .chain-arrow { color:#6b7099; font-size:.7rem; line-height:1; margin:1px 0; }
+  .chain-arrow { color:#8f93b2; font-size:.7rem; line-height:1; margin:1px 0; }
 
   /* Concern coloring for agent evidence/impact deltas — by RISK, not direction */
-  .ho-stats td.d.concern-high   { color:#dc3545; }   /* concerning */
-  .ho-stats td.d.concern-medium { color:#e0871a; }   /* potentially concerning */
-  .ho-stats td.d.concern-none   { color:#8a90a0; }   /* not notable */
+  .ho-stats td.d.concern-high   { color:#e87d87; }   /* concerning */
+  .ho-stats td.d.concern-medium { color:#edaf64; }   /* potentially concerning */
+  .ho-stats td.d.concern-none   { color:#acb0bb; }   /* not notable */
 
   /* Header row: agent pair on the left, status pill on the right */
   .ho-card-head { display:flex; justify-content:space-between;
@@ -93,13 +93,13 @@
      wrap mid-pair (sender, down-arrow, receiver). Always readable at any zoom. */
   .ho-pair { display:flex; flex-direction:column; align-items:flex-start;
              gap:2px; min-width:0; }
-  .ho-pair .agent { display:inline-block; background:#eef0f6; color:#1a1a2e;
+  .ho-pair .agent { display:inline-block; background:#12192f; color:#c9cfe6;
                     border-radius:5px; padding:3px 10px; font-weight:700;
                     font-size:.9rem; max-width:100%; line-height:1.25;
                     word-break:break-word; }
-  .ho-pair .arrow-down { color:#adb5bd; font-size:.8rem; line-height:1;
+  .ho-pair .arrow-down { color:#c6ccd2; font-size:.8rem; line-height:1;
                          align-self:center; margin:1px 0; }
-  .ho-vol-badge   { display:inline-block; background:#e1e7fb; color:#1a3d8a;
+  .ho-vol-badge   { display:inline-block; background:#131a33; color:#285dd3;
                     border-radius:10px; padding:2px 9px; font-size:.66rem;
                     font-weight:600; margin-top:6px; white-space:nowrap; }
 
@@ -109,35 +109,35 @@
   .ho-minor-badge { display:inline-block; border-radius:10px; padding:2px 9px;
                     font-size:.64rem; font-weight:600; margin-top:6px;
                     white-space:nowrap; cursor:help; }
-  .ho-minor-badge.minor-high   { background:#fbe7e7; color:#8a1f1f; }
-  .ho-minor-badge.minor-medium { background:#fff4e0; color:#7a4a00; }
-  .ho-minor-badge.minor-low    { background:#eef0f6; color:#5a6072; }
+  .ho-minor-badge.minor-high   { background:#301212; color:#d02f2f; }
+  .ho-minor-badge.minor-medium { background:#312613; color:#d17f00; }
+  .ho-minor-badge.minor-low    { background:#12192f; color:#b8bbc7; }
 
   /* Section blocks with consistent vertical rhythm */
   .ho-section + .ho-section { margin-top:14px; }
-  .ho-label { font-size:.75rem; color:#8a90a0; margin-bottom:4px;
+  .ho-label { font-size:.75rem; color:#acb0bb; margin-bottom:4px;
               font-weight:600; letter-spacing:0.1px; }
-  .ho-risk-reason { font-size:.7rem; color:#8a90a0; margin-top:4px;
+  .ho-risk-reason { font-size:.7rem; color:#acb0bb; margin-top:4px;
                     max-width:150px; line-height:1.3; }
-  .ho-rule  { font-weight:600; color:#1a1a2e; font-size:.92rem; }
-  .ho-also  { font-size:.74rem; color:#8a90a0; margin-top:2px; }
-  .ho-text  { font-size:.85rem; color:#3a3f55; line-height:1.45; }
+  .ho-rule  { font-weight:600; color:#c9cfe6; font-size:.92rem; }
+  .ho-also  { font-size:.74rem; color:#acb0bb; margin-top:2px; }
+  .ho-text  { font-size:.85rem; color:#c4c7d6; line-height:1.45; }
 
   /* Stat table — same format for drift evidence AND common-handoff stats */
   .ho-stats { width:100%; font-size:.82rem; font-variant-numeric:tabular-nums;
               border-collapse:collapse; }
   .ho-stats td { padding:4px 0; vertical-align:middle; border:none; }
-  .ho-stats td.k   { color:#5a6072; }
-  .ho-stats td.v   { text-align:right; font-weight:600; color:#1a1a2e;
+  .ho-stats td.k   { color:#b8bbc7; }
+  .ho-stats td.v   { text-align:right; font-weight:600; color:#c9cfe6;
                      padding-right:12px; white-space:nowrap; }
   .ho-stats td.d   { text-align:right; font-weight:600; width:64px;
                      white-space:nowrap; }
-  .ho-stats td.d.up   { color:#dc3545; }
-  .ho-stats td.d.down { color:#28a745; }
-  .ho-stats td.d.flat { color:#8a90a0; }
-  .ho-stats td.d.good { color:#28a745; }   /* good = green regardless of direction */
-  .ho-stats td.d.mid  { color:#f0ad4e; }
-  .ho-stats td.d.bad  { color:#dc3545; }
+  .ho-stats td.d.up   { color:#e87d87; }
+  .ho-stats td.d.down { color:#50d56f; }
+  .ho-stats td.d.flat { color:#acb0bb; }
+  .ho-stats td.d.good { color:#50d56f; }   /* good = green regardless of direction */
+  .ho-stats td.d.mid  { color:#f5c786; }
+  .ho-stats td.d.bad  { color:#e87d87; }
 
 </style>
 
