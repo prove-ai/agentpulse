@@ -1439,12 +1439,15 @@ body[data-section="start"]         .ambient { filter: hue-rotate(80deg); }   /* 
     min-height: 135vh;
     min-height: 135svh;
   }
-  /* last page: final CTA + footer share one screen */
+  /* last page: final CTA + footer share one screen; trim the section's
+     padding so band + footer always fit inside a single snapped page */
   .final {
     min-height: calc(100vh - 80px);
     min-height: calc(100svh - 80px);
     display: flex;
     align-items: center;
+    padding-top: 28px;
+    padding-bottom: 28px;
   }
   .final-inner { width: 100%; }
 }
