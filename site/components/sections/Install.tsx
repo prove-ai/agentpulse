@@ -31,7 +31,7 @@ export default function Install() {
       <div className="sect-inner feature-grid grid-install">
         <div>
           <div className="num">03 // OPENTELEMETRY NATIVE</div>
-          <h2>Instrument once. Track every agent.</h2>
+          <h2>Instrument once.<br />Track every agent.</h2>
           <ul className="checklist">
             <li>Works with your existing agent stack</li>
             <li>Captures traces locally from your first run</li>

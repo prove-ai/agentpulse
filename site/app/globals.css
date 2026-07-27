@@ -1433,6 +1433,12 @@ body[data-section="start"]         .ambient { filter: hue-rotate(80deg); }   /* 
     padding-bottom: 48px;
   }
   .sect-inner { width: 100%; }
+  /* tall sections span more than one page: the snap spec then allows free
+     scrolling inside them, so a small scroll no longer flips past them */
+  #console, #claude {
+    min-height: 135vh;
+    min-height: 135svh;
+  }
   /* last page: final CTA + footer share one screen */
   .final {
     min-height: calc(100vh - 80px);

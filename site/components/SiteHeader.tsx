@@ -47,14 +47,7 @@ export default function SiteHeader() {
             Support
           </Link>
         </nav>
-        <div className="flex items-center gap-3 justify-self-end">
-          <a
-            className="btn btn-primary !px-4 !py-2.5 !text-[13.5px]"
-            href="https://calendly.com/nick-proveai/agent-pulse-demo"
-          >
-            Chat with our engineers
-          </a>
-        </div>
+        <div className="justify-self-end" />
       </div>
     </header>
   );
