@@ -228,11 +228,11 @@ body[data-section="start"]         .ambient { filter: hue-rotate(80deg); }   /* 
 .hero-copy .btn { text-shadow: none; }
 
 .hero h1 {
-  font-family: "New York", ui-serif, Georgia, "Times New Roman", serif;
-  font-size: clamp(42px, 4.8vw, 72px);
-  line-height: 1.06;
-  letter-spacing: -0.015em;
-  font-weight: 640;
+  font-family: var(--font-serif), "Instrument Serif", ui-serif, Georgia, serif;
+  font-size: clamp(52px, 6vw, 96px);
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+  font-weight: 400;
   color: #fff;
   white-space: nowrap;
   margin: 0;
