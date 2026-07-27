@@ -21,7 +21,7 @@ export default function Hero() {
           </p>
           <div className="hero-cta">
             <a className="btn btn-primary" href="https://github.com/prove-ai/agentpulse">
-              Get started free <span aria-hidden>→</span>
+              Get started free
             </a>
             <a className="btn btn-ghost" href="https://calendly.com/nick-proveai/agent-pulse-demo">
               Chat with our engineers

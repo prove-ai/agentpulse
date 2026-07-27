@@ -228,10 +228,11 @@ body[data-section="start"]         .ambient { filter: hue-rotate(80deg); }   /* 
 .hero-copy .btn { text-shadow: none; }
 
 .hero h1 {
+  font-family: "New York", ui-serif, Georgia, "Times New Roman", serif;
   font-size: clamp(42px, 4.8vw, 72px);
-  line-height: 1.04;
-  letter-spacing: -0.03em;
-  font-weight: 700;
+  line-height: 1.06;
+  letter-spacing: -0.015em;
+  font-weight: 640;
   color: #fff;
   white-space: nowrap;
   margin: 0;
@@ -241,17 +242,25 @@ body[data-section="start"]         .ambient { filter: hue-rotate(80deg); }   /* 
 }
 .hero h1 .l1 { color: var(--fg-mute); }
 .hero p.lead {
-  margin: 24px 0 0 auto;
+  margin: 24px 0 0;
   font-size: clamp(17px, 1.5vw, 20px);
   color: var(--fg-soft);
-  max-width: 560px;
+  white-space: nowrap;
+}
+@media (max-width: 960px) {
+  .hero p.lead { white-space: normal; }
 }
 .hero-cta {
   display: flex;
-  gap: 12px;
-  margin-top: 34px;
+  gap: 14px;
+  margin-top: 38px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+.hero-cta .btn {
+  padding: 18px 32px;
+  font-size: 17px;
+  border-radius: 12px;
 }
 .hero-trust {
   margin-top: 30px;
