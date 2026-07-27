@@ -14,14 +14,10 @@ export default function Hero() {
 
       <div className="hero-inner">
         <div className="hero-copy">
-          <div className="eyebrow">Drift investigation for multi-agent systems</div>
-          <h1>
-            <span className="l1">Traces show what happened.</span>
-            <br />
-            <span className="one-line">We show you <span className="grad-text">where to look</span>.</span>
-          </h1>
+          <h1>Find where failures begin</h1>
           <p className="lead">
-            Identify which agent drifted, understand why, and know what to check next.
+            Follow changes across agents, handoffs, prompts, and models to the
+            most likely source.
           </p>
           <div className="hero-cta">
             <a className="btn btn-primary" href="https://github.com/prove-ai/agentpulse">
@@ -31,7 +27,6 @@ export default function Hero() {
               Chat with our engineers
             </a>
           </div>
-          <div className="hero-trust">Open source · MIT License · Works with OpenAI, Anthropic, LangChain</div>
         </div>
       </div>
     </section>
