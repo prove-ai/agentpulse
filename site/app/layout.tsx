@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
+import { Geist, Geist_Mono, Source_Serif_4 } from "next/font/google";
 import SiteFooter from "@/components/SiteFooter";
 import SiteHeader from "@/components/SiteHeader";
 import "./globals.css";
@@ -14,8 +14,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const instrumentSerif = Instrument_Serif({
-  weight: "400",
+const sourceSerif = Source_Serif_4({
   variable: "--font-serif",
   subsets: ["latin"],
 });
@@ -34,7 +33,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${instrumentSerif.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${sourceSerif.variable} h-full antialiased`}
       data-theme="light"
       suppressHydrationWarning
     >

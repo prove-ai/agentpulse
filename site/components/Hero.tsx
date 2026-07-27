@@ -16,7 +16,7 @@ export default function Hero() {
         <div className="hero-copy">
           <h1>Find where agent<br />failures begin</h1>
           <p className="lead">
-            Follow changes across agents, handoffs, prompts, and models to the
+            Follow changes across agents, handoffs, and rounting to the
             most likely source.
           </p>
           <div className="hero-cta">
