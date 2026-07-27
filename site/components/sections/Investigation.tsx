@@ -77,6 +77,34 @@ export default function Investigation() {
         </p>
 
         <div className="inv" data-step={step} ref={ref}>
+          <div className="inv-steps" role="tablist" aria-label="Investigation steps">
+            {STEPS.map((s, i) => (
+              <button
+                key={s.title}
+                type="button"
+                role="tab"
+                aria-selected={step === i + 1}
+                data-active={step === i + 1}
+                data-visited={step > i}
+                onClick={() => goto(i + 1)}
+              >
+                <span className="inv-step-n">{i + 1}</span>
+                {s.title}
+              </button>
+            ))}
+          </div>
+
+          <div className="inv-cap" key={step}>
+            {step === 0 ? (
+              <span className="inv-cap-idle">The investigation plays here as it enters view…</span>
+            ) : (
+              <>
+                <span className="inv-cap-title">{cap.title}</span>
+                <span className="inv-cap-text">{cap.text}</span>
+              </>
+            )}
+          </div>
+
           <div className="inv-pipe-scroll">
             <div className="inv-pipe">
               <div className="anode" data-id="researcher">
@@ -131,34 +159,6 @@ export default function Investigation() {
                 <div className="am"><span>tokens / turn</span><b className="warn">+45%</b></div>
               </div>
             </div>
-          </div>
-
-          <div className="inv-cap" key={step}>
-            {step === 0 ? (
-              <span className="inv-cap-idle">The investigation plays here as it enters view…</span>
-            ) : (
-              <>
-                <span className="inv-cap-title">{cap.title}</span>
-                <span className="inv-cap-text">{cap.text}</span>
-              </>
-            )}
-          </div>
-
-          <div className="inv-steps" role="tablist" aria-label="Investigation steps">
-            {STEPS.map((s, i) => (
-              <button
-                key={s.title}
-                type="button"
-                role="tab"
-                aria-selected={step === i + 1}
-                data-active={step === i + 1}
-                data-visited={step > i}
-                onClick={() => goto(i + 1)}
-              >
-                <span className="inv-step-n">{i + 1}</span>
-                {s.title}
-              </button>
-            ))}
           </div>
         </div>
       </div>

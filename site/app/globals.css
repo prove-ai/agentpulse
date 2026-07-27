@@ -647,7 +647,7 @@ body[data-section="start"]         .ambient { filter: hue-rotate(80deg); }   /* 
 
 /* caption + step pills */
 .inv-cap {
-  margin-top: 22px;
+  margin-top: 20px;
   min-height: 62px;
   text-align: center;
   animation: cap-in 0.45s ease;
@@ -678,7 +678,7 @@ body[data-section="start"]         .ambient { filter: hue-rotate(80deg); }   /* 
   gap: 8px;
   justify-content: center;
   flex-wrap: wrap;
-  margin-top: 20px;
+  margin-top: 2px;
 }
 .inv-steps button {
   display: inline-flex;
