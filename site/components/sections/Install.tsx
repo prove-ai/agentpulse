@@ -29,15 +29,6 @@ export default function Install() {
   return (
     <section id="install" className="sect">
       <div className="sect-inner feature-grid grid-install">
-        <div>
-          <div className="num">Integration</div>
-          <h2>Instrument once.<br />Track every agent.</h2>
-          <ul className="checklist">
-            <li>Works with your existing agent stack</li>
-            <li>Captures traces locally from your first run</li>
-            <li>Keeps instrumentation consistent across frameworks</li>
-          </ul>
-        </div>
         <div className="term">
           <div className="term-head">
             <div className="term-bar">
@@ -65,6 +56,14 @@ export default function Install() {
             </div>
           </div>
           {SNIPPETS[lang]}
+        </div>
+        <div className="install-side">
+          <div className="num">Integration</div>
+          <h2>Instrument once.</h2>
+          <p className="sect-sub">
+            One call adds OpenTelemetry-native tracing across your agents, tools, 
+            and handoffs, without changing their implementation.
+          </p>
         </div>
         <div className="works-with">
           <span className="ww-label">Works with</span>

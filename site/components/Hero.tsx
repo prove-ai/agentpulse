@@ -16,8 +16,8 @@ export default function Hero() {
         <div className="hero-copy">
           <h1>Find where agent<br />failures begin</h1>
           <p className="lead">
-            Follow changes across agents, handoffs, and rounting to the
-            most likely source
+            Follow changes across agents, handoffs, and routing to the
+            most likely source.
           </p>
           <div className="hero-cta">
             <a className="btn btn-primary" href="https://github.com/prove-ai/agentpulse">
