@@ -1,10 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 export default function SiteHeader() {
   const [scrolled, setScrolled] = useState(false);
+  // Only the home page has a dark hero behind the transparent header;
+  // every other page starts on a light background.
+  const overHero = usePathname() === "/";
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -14,7 +18,7 @@ export default function SiteHeader() {
   }, []);
 
   return (
-    <header className="site-header fixed inset-x-0 top-0 z-50" data-scrolled={scrolled}>
+    <header className="site-header fixed inset-x-0 top-0 z-50" data-scrolled={scrolled || !overHero}>
       <div className="mx-auto grid max-w-[1180px] grid-cols-[1fr_auto_1fr] items-center px-7 py-4">
         <Link href="/" className="flex items-center gap-2.5 justify-self-start font-semibold text-[20px] text-white">
           <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden>

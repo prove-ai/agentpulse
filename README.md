@@ -13,7 +13,7 @@ AgentPulse is an **open-source reference implementation** of drift investigation
 
 If you try it, I would like to hear what worked and what did not. See [Feedback](#feedback).
 
-![Drift Investigation](docs/screenshots/drift-investigation.png)
+![Drift Investigation](docs/screenshots/light/drift-investigation.png)
 
 *The core view: writer drifted after a prompt and model change at run 18, and critic's success dropped as a consequence. The fix belongs in writer, not critic.*
 
@@ -129,12 +129,12 @@ The core view, shown at the top of this README: findings ranked by severity, the
 ### Run explorer (`/`)
 Every captured run with status, route, and cost. Click through to the per-run detail page with an execution timeline (gantt), the interactive agent-chain DAG, anomalies vs the baseline, and parallel-group efficiency.
 
-![Run explorer](docs/screenshots/run-history.png)
+![Run explorer](docs/screenshots/light/run-history.png)
 
 ### Metrics Explorer (`/explore`)
 Chart any metric for any agent, handoff, or the whole system across runs, with the same baseline bands and version markers as Drift Investigation, plus custom metrics and thresholds.
 
-![Metrics Explorer](docs/screenshots/metrics-explorer.png)
+![Metrics Explorer](docs/screenshots/light/metrics-explorer.png)
 
 There is also a trend view (`/trends`) with agent health cards and a handoff health leaderboard, and an event timeline (`/timeline`) of prompt, model, and tool changes.
 
