@@ -2,7 +2,7 @@ export default function FinalCta() {
   return (
     <section id="start" className="final">
       <div className="final-inner">
-        <div className="num">05 // Get started</div>
+        <div className="num">Get started</div>
         <h2>Try it on a real production trace</h2>
         <p className="final-sub">
           Bring a failed run or connect AgentPulse to your stack. We'll walk through the investigation with you in 30 minutes.

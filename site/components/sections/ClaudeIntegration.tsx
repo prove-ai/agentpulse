@@ -145,7 +145,7 @@ export default function ClaudeIntegration() {
   return (
     <section id="claude" className="sect">
       <div className="sect-inner">
-        <div className="num">04 // Claude integration</div>
+        <div className="num">Claude Code</div>
         <h2>Debug agent behavior from Claude Code.</h2>
         <p className="sect-sub sect-sub-wide">
           Ask what changed, trace the failure across agents, and get the next

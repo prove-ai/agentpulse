@@ -70,7 +70,7 @@ export default function Investigation() {
   return (
     <section id="investigation" className="sect">
       <div className="sect-inner">
-        <div className="num">02 // Drift investigation</div>
+        <div className="num">Investigation</div>
         <h2>From symptom to source.</h2>
         <p className="sect-sub sect-sub-wide">
           The failing agent may only be the symptom. AgentPulse follows the evidence across agents, handoffs, and changes to find where the failure actually began.

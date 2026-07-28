@@ -8,10 +8,10 @@ import Investigation from "@/components/sections/Investigation";
 
 // Section map — drives the right-side dot nav.
 const SECTIONS = [
-  { id: "console", label: "Console" },
+  { id: "console", label: "Overview" },
   { id: "investigation", label: "Investigation" },
-  { id: "install", label: "Install" },
-  { id: "claude", label: "Claude" },
+  { id: "install", label: "Integration" },
+  { id: "claude", label: "Claude Code" },
   { id: "start", label: "Get started" },
 ];
 
