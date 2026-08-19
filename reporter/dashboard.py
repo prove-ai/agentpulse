@@ -2753,6 +2753,16 @@ def overview():
         args = MultiDict(request.args)
         args["range"] = "30d"                        # a landing page wants a broad default
     ctx = _browse_context(args, _band_cfg())
+    # If the injected 30-day default catches nothing (the project's runs are
+    # older), widen to the full run range — a landing page showing zeros for a
+    # project with data reads as a bug. Explicit user-picked ranges are kept.
+    if not request.args.get("range") and not (request.args.get("start") and request.args.get("end")) \
+            and not ctx["runs"]:
+        all_ts = sorted(t for t in (r.get("timestamp", "") for r in list_runs(limit=1000)) if t)
+        if all_ts:
+            args.pop("range", None)
+            args["start"], args["end"] = all_ts[0][:10], all_ts[-1][:10]
+            ctx = _browse_context(args, _band_cfg())
     # Same engine AND same default comparison as Drift Investigation (/drift2):
     # baseline version vs every later version, so the summary and the tab agree.
     runs = sorted([r for r in list_runs(limit=1000)
