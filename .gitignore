@@ -22,6 +22,7 @@ __pycache__/
 .repomap/
 converted_runs.json
 report.html
+handoff.md
 
 # Databases are per-user data — only the bundled demo sample is committed
 db/*.db

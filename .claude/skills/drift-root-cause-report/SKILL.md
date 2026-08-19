@@ -1,6 +1,6 @@
 ---
 name: drift-root-cause-report
-description: Produce a full root-cause report for a specific drift — finding, which version introduced it, evidence, and remediation. Use when the user asks to "investigate <agent>", "write up the drift", "root cause report", or drills into a specific finding.
+description: Produce a full root-cause report for a specific drift — finding, which version introduced it, evidence, and remediation. Use when the user asks to investigate a named agent, "write up the drift", "root cause report", or drills into a specific finding.
 ---
 
 # Drift root-cause report
