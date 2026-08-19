@@ -21,6 +21,7 @@ __pycache__/
 # Local artifacts (per-user, not part of the project)
 .repomap/
 converted_runs.json
+report.html
 
 # Databases are per-user data — only the bundled demo sample is committed
 db/*.db
