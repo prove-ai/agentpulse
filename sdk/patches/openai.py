@@ -26,34 +26,65 @@ from pathlib import Path
 _OBS_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(_OBS_ROOT))
 
-from sdk.session import get_active_session, get_active_agent
+from sdk.session import LLMCallRecord, get_active_session, get_active_agent, safe_json
 
 _PATCHED = False
+
+# Request kwargs worth recording for replay (chat + legacy completions).
+# Everything that shapes the completion; auth/transport kwargs excluded.
+_REQUEST_KEYS = (
+    "model", "messages", "prompt", "tools", "tool_choice", "functions",
+    "function_call", "max_tokens", "max_completion_tokens", "temperature",
+    "top_p", "n", "stop", "seed", "response_format", "frequency_penalty",
+    "presence_penalty", "logit_bias", "reasoning_effort",
+)
+
+
+def _request_payload(kwargs: dict) -> str:
+    return safe_json({k: kwargs[k] for k in _REQUEST_KEYS if k in kwargs})
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 def _record(start_ns: int, end_ns: int,
-            input_tokens: int, output_tokens: int, model: str) -> None:
+            input_tokens: int, output_tokens: int, model: str,
+            request_json: str = "", response_json: str = "") -> None:
     """Push a finished LLM call into the active session's queue.
 
     Tags the call with the active agent (a ContextVar — per-asyncio-task).
     This is how parallel asyncio.gather agents stay correctly attributed.
-    Legacy untagged tuples remain 5 elements; agent-tagged tuples are 6.
     """
     session = get_active_session()
     if session is None:
         return
-    agent = get_active_agent()
-    session._pending_api_calls.append(
-        (start_ns, end_ns,
-         int(input_tokens or 0), int(output_tokens or 0),
-         str(model or ""), agent)
-    )
+    session._pending_api_calls.append(LLMCallRecord(
+        start_ns=start_ns, end_ns=end_ns,
+        input_tokens=int(input_tokens or 0),
+        output_tokens=int(output_tokens or 0),
+        model=str(model or ""),
+        request_json=request_json,
+        response_json=response_json,
+        agent=get_active_agent(),
+    ))
 
 
-def _record_from_response(start_ns: int, end_ns: int, response) -> None:
+def _response_payload(response) -> str:
+    dump = getattr(response, "model_dump", None)
+    if callable(dump):
+        try:
+            return safe_json(dump())
+        except Exception:
+            pass
+    return safe_json({
+        "choices": getattr(response, "choices", None),
+        "model":   getattr(response, "model", None),
+        "usage":   getattr(response, "usage", None),
+    })
+
+
+def _record_from_response(start_ns: int, end_ns: int, response,
+                          request_json: str = "") -> None:
     """Non-streaming responses carry .usage directly."""
     usage = getattr(response, "usage", None)
     if usage is None:
@@ -63,6 +94,8 @@ def _record_from_response(start_ns: int, end_ns: int, response) -> None:
         getattr(usage, "prompt_tokens",     0),
         getattr(usage, "completion_tokens", 0),
         getattr(response, "model", ""),
+        request_json=request_json,
+        response_json=_response_payload(response),
     )
 
 
@@ -93,14 +126,16 @@ class _AsyncStreamWrapper:
     resilient to caller exception handling.
     """
 
-    def __init__(self, stream, start_ns: int):
-        self._stream      = stream
-        self._start_ns    = start_ns
-        self._model       = ""
-        self._usage_inp   = 0
-        self._usage_out   = 0
-        self._delta_chars = 0      # fallback if usage is never emitted
-        self._finalised   = False  # guard against double-recording
+    def __init__(self, stream, start_ns: int, request_json: str = ""):
+        self._stream       = stream
+        self._start_ns     = start_ns
+        self._model        = ""
+        self._usage_inp    = 0
+        self._usage_out    = 0
+        self._delta_chars  = 0      # fallback if usage is never emitted
+        self._text_parts   = []     # accumulated output text for the payload record
+        self._request_json = request_json
+        self._finalised    = False  # guard against double-recording
 
     def __aiter__(self):
         return self
@@ -158,6 +193,7 @@ class _AsyncStreamWrapper:
             content = getattr(delta, "content", delta if isinstance(delta, str) else None)
             if isinstance(content, str):
                 self._delta_chars += len(content)
+                self._text_parts.append(content)
 
     def _finalise(self) -> None:
         if self._finalised:
@@ -167,20 +203,30 @@ class _AsyncStreamWrapper:
         # If the authoritative usage chunk never arrived, estimate output tokens
         # from character count (~4 chars per token is a common rule of thumb).
         out_tokens = self._usage_out or max(1, self._delta_chars // 4)
-        _record(self._start_ns, end_ns, self._usage_inp, out_tokens, self._model)
+        # Streamed responses have no single response object; record the
+        # accumulated text so the call's outcome is still replay-comparable.
+        response_json = safe_json({
+            "streamed": True,
+            "content":  "".join(self._text_parts),
+            "model":    self._model,
+        })
+        _record(self._start_ns, end_ns, self._usage_inp, out_tokens, self._model,
+                request_json=self._request_json, response_json=response_json)
 
 
 class _SyncStreamWrapper:
     """Same idea, synchronous."""
 
-    def __init__(self, stream, start_ns: int):
-        self._stream      = stream
-        self._start_ns    = start_ns
-        self._model       = ""
-        self._usage_inp   = 0
-        self._usage_out   = 0
-        self._delta_chars = 0
-        self._finalised   = False
+    def __init__(self, stream, start_ns: int, request_json: str = ""):
+        self._stream       = stream
+        self._start_ns     = start_ns
+        self._model        = ""
+        self._usage_inp    = 0
+        self._usage_out    = 0
+        self._delta_chars  = 0
+        self._text_parts   = []
+        self._request_json = request_json
+        self._finalised    = False
 
     def __iter__(self):
         return self
@@ -237,18 +283,18 @@ def patch_openai() -> None:
 # ---------------------------------------------------------------------------
 # Chat completions — the modern endpoint (most users)
 # ---------------------------------------------------------------------------
-def _wrap_async(response, start_ns):
+def _wrap_async(response, start_ns, request_json=""):
     """If streaming, wrap in async passthrough; else record non-streaming usage."""
     if _is_stream(response):
-        return _AsyncStreamWrapper(response, start_ns)
-    _record_from_response(start_ns, time.time_ns(), response)
+        return _AsyncStreamWrapper(response, start_ns, request_json)
+    _record_from_response(start_ns, time.time_ns(), response, request_json)
     return response
 
 
-def _wrap_sync(response, start_ns):
+def _wrap_sync(response, start_ns, request_json=""):
     if _is_stream(response):
-        return _SyncStreamWrapper(response, start_ns)
-    _record_from_response(start_ns, time.time_ns(), response)
+        return _SyncStreamWrapper(response, start_ns, request_json)
+    _record_from_response(start_ns, time.time_ns(), response, request_json)
     return response
 
 
@@ -278,8 +324,9 @@ def _patch_chat_async() -> None:
     async def _instrumented(self, *args, **kwargs):
         start_ns = time.time_ns()
         kwargs = _force_usage(kwargs)
+        request_json = _request_payload(kwargs)
         response = await original(self, *args, **kwargs)
-        return _wrap_async(response, start_ns)
+        return _wrap_async(response, start_ns, request_json)
 
     AsyncCompletions.create = _instrumented
 
@@ -294,8 +341,9 @@ def _patch_chat_sync() -> None:
     def _instrumented(self, *args, **kwargs):
         start_ns = time.time_ns()
         kwargs = _force_usage(kwargs)
+        request_json = _request_payload(kwargs)
         response = original(self, *args, **kwargs)
-        return _wrap_sync(response, start_ns)
+        return _wrap_sync(response, start_ns, request_json)
 
     Completions.create = _instrumented
 
@@ -312,8 +360,9 @@ def _patch_legacy_async() -> None:
 
     async def _instrumented(self, *args, **kwargs):
         start_ns = time.time_ns()
+        request_json = _request_payload(kwargs)
         response = await original(self, *args, **kwargs)
-        return _wrap_async(response, start_ns)
+        return _wrap_async(response, start_ns, request_json)
 
     AsyncCompletions.create = _instrumented
 
@@ -327,7 +376,8 @@ def _patch_legacy_sync() -> None:
 
     def _instrumented(self, *args, **kwargs):
         start_ns = time.time_ns()
+        request_json = _request_payload(kwargs)
         response = original(self, *args, **kwargs)
-        return _wrap_sync(response, start_ns)
+        return _wrap_sync(response, start_ns, request_json)
 
     Completions.create = _instrumented

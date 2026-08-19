@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS spans (
     branch_id           TEXT,  -- identifier of this branch within its fan-out group
     join_step_id        TEXT,  -- span_id of the join step (NULL if no join)
     retry_count         INTEGER DEFAULT 0,  -- LLM-call retries within this step
+    output_text         TEXT DEFAULT '',    -- agent's final message this turn (replay)
     FOREIGN KEY (run_id) REFERENCES runs(run_id)
 );
 
@@ -152,6 +153,27 @@ CREATE TABLE IF NOT EXISTS tool_calls (
     tool_name       TEXT,
     success         INTEGER,
     duration_ms     REAL,
+    arguments_json  TEXT,   -- exact arguments the tool was called with (replay)
+    result_json     TEXT,   -- what the tool returned (served back in replay)
+    FOREIGN KEY (span_id) REFERENCES spans(span_id),
+    FOREIGN KEY (run_id)  REFERENCES runs(run_id)
+);
+
+-- One row per LLM API call (a span can hold several: tool loops, retries).
+-- request_json / response_json are the verbatim payloads a replay needs:
+-- messages+system+tools+params in, content blocks+stop_reason+usage out.
+CREATE TABLE IF NOT EXISTS llm_calls (
+    call_id         TEXT PRIMARY KEY,
+    span_id         TEXT,
+    run_id          TEXT,
+    call_index      INTEGER,  -- order of the call within its span
+    start_time_ms   REAL,
+    end_time_ms     REAL,
+    input_tokens    INTEGER,
+    output_tokens   INTEGER,
+    model           TEXT,
+    request_json    TEXT,
+    response_json   TEXT,
     FOREIGN KEY (span_id) REFERENCES spans(span_id),
     FOREIGN KEY (run_id)  REFERENCES runs(run_id)
 );
@@ -168,6 +190,7 @@ CREATE TABLE IF NOT EXISTS handoffs (
     b_input_tokens      INTEGER,
     context_ratio       REAL,
     was_requested       INTEGER,
+    payload_text        TEXT,   -- verbatim message A handed to B (boundary edits)
     FOREIGN KEY (run_id) REFERENCES runs(run_id)
 );
 """
@@ -181,6 +204,12 @@ _MIGRATIONS = [
     "ALTER TABLE spans ADD COLUMN join_step_id   TEXT",
     "ALTER TABLE spans ADD COLUMN retry_count    INTEGER DEFAULT 0",
     "ALTER TABLE runs  ADD COLUMN config_json    TEXT",
+    # Replay capture (payloads; not shown in the dashboard)
+    "ALTER TABLE spans      ADD COLUMN output_text    TEXT DEFAULT ''",
+    "ALTER TABLE tool_calls ADD COLUMN arguments_json TEXT",
+    "ALTER TABLE tool_calls ADD COLUMN result_json    TEXT",
+    "ALTER TABLE tool_calls ADD COLUMN start_time_ms  REAL",
+    "ALTER TABLE handoffs   ADD COLUMN payload_text   TEXT",
 ]
 
 
@@ -277,6 +306,9 @@ def _compute_handoffs(session: RunSession) -> list[dict]:
             "b_input_tokens":  b.input_tokens,
             "context_ratio":   round(ratio, 3),
             "was_requested":   1 if was_requested else 0,
+            # The verbatim message A produced going into B's turn — what a
+            # replay boundary edit patches in B's first prompt.
+            "payload_text":    getattr(a, "output_text", "") or "",
         })
     return handoffs
 
@@ -502,8 +534,9 @@ def write_session(
               (span_id, run_id, agent_name, turn_index, start_time_ms,
                end_time_ms, duration_ms, input_tokens, output_tokens,
                model, tool_call_count, status, status_value,
-               parent_step_id, branch_id, join_step_id, retry_count)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               parent_step_id, branch_id, join_step_id, retry_count,
+               output_text)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 span_id,
@@ -524,20 +557,47 @@ def write_session(
                 getattr(turn, "branch_id",      None),
                 getattr(turn, "join_step_id",   None),
                 getattr(turn, "retry_count",    0),
+                getattr(turn, "output_text",    ""),
             ),
         )
 
         for tool in turn.tools:
             conn.execute(
                 """
-                INSERT INTO tool_calls
-                  (call_id, span_id, run_id, tool_name, success, duration_ms)
-                VALUES (?,?,?,?,?,?)
+                INSERT OR REPLACE INTO tool_calls
+                  (call_id, span_id, run_id, tool_name, success, duration_ms,
+                   arguments_json, result_json, start_time_ms)
+                VALUES (?,?,?,?,?,?,?,?,?)
                 """,
                 (
-                    str(uuid.uuid4()), span_id, session.run_id,
+                    # Prefer the framework's own call id (stable across a
+                    # rewrite of the same run); fall back to a fresh uuid.
+                    getattr(tool, "call_id", "") or str(uuid.uuid4()),
+                    span_id, session.run_id,
                     tool.tool_name, 1 if tool.success else 0,
                     round(tool.duration_ms, 1),
+                    getattr(tool, "arguments_json", ""),
+                    getattr(tool, "result_json",    ""),
+                    tool.start_ns / 1_000_000,
+                ),
+            )
+
+        # ---- llm_calls: verbatim request/response payloads for replay ----
+        for ci, call in enumerate(getattr(turn, "llm_calls", []) or []):
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO llm_calls
+                  (call_id, span_id, run_id, call_index, start_time_ms,
+                   end_time_ms, input_tokens, output_tokens, model,
+                   request_json, response_json)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    f"{span_id}:{ci}", span_id, session.run_id, ci,
+                    call.start_ns / 1_000_000,
+                    call.end_ns / 1_000_000,
+                    call.input_tokens, call.output_tokens, call.model,
+                    call.request_json, call.response_json,
                 ),
             )
 
@@ -548,8 +608,8 @@ def write_session(
             INSERT OR REPLACE INTO handoffs
               (handoff_id, run_id, handoff_index, agent_from, agent_to,
                turn_index_from, turn_index_to, a_output_tokens, b_input_tokens,
-               context_ratio, was_requested)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+               context_ratio, was_requested, payload_text)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 h["handoff_id"], h["run_id"], h["handoff_index"],
@@ -557,6 +617,7 @@ def write_session(
                 h["turn_index_from"], h["turn_index_to"],
                 h["a_output_tokens"], h["b_input_tokens"],
                 h["context_ratio"], h["was_requested"],
+                h["payload_text"],
             ),
         )
 

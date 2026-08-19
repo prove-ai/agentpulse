@@ -17,12 +17,38 @@ This ensures:
 
 from __future__ import annotations
 
+import json
 import re
 import time
 import uuid
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Optional
+
+
+def safe_json(obj) -> str:
+    """Best-effort JSON serialization for captured payloads.
+
+    Pydantic models (Anthropic/OpenAI SDK objects) are dumped via model_dump();
+    anything else non-serializable falls back to str(). Capture must never
+    break the user's call, so this cannot raise.
+    """
+    def _default(o):
+        for attr in ("model_dump", "dict"):
+            fn = getattr(o, attr, None)
+            if callable(fn):
+                try:
+                    return fn()
+                except Exception:
+                    pass
+        return str(o)
+    try:
+        return json.dumps(obj, default=_default, ensure_ascii=False)
+    except Exception:
+        try:
+            return json.dumps(str(obj), ensure_ascii=False)
+        except Exception:
+            return '""'
 
 _STATUS_RE = re.compile(r"STATUS:\s*([A-Za-z_]+)(?:\s*:\s*([A-Za-z]+))?", re.IGNORECASE)
 
@@ -39,6 +65,23 @@ def parse_status_value(content: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Per-LLM-call record — the full request/response payload one API call needs
+# to be replayed (messages in, content out, params). Kept per call, not per
+# turn, because a turn can hold several calls (tool loops, retries).
+# ---------------------------------------------------------------------------
+@dataclass
+class LLMCallRecord:
+    start_ns:      int
+    end_ns:        int
+    input_tokens:  int
+    output_tokens: int
+    model:         str
+    request_json:  str = ""   # full request: messages, system, tools, params
+    response_json: str = ""   # full response: content blocks, stop_reason, usage
+    agent:         Optional[str] = None  # tagged from the active-agent ContextVar
+
+
+# ---------------------------------------------------------------------------
 # Per-tool-call record
 # ---------------------------------------------------------------------------
 @dataclass
@@ -47,6 +90,9 @@ class ToolRecord:
     success:    bool
     start_ns:   int
     end_ns:     int
+    call_id:        str = ""
+    arguments_json: str = ""  # the exact arguments the tool was called with
+    result_json:    str = ""  # what the tool returned
 
     @property
     def duration_ms(self) -> float:
@@ -73,6 +119,8 @@ class TurnData:
     status:         str  = "OK"         # span status: OK | ERROR
     status_value:   str  = ""           # STATUS line content, e.g. "COMPLETE", "NEEDS_INFO: Writer"
     retry_count:    int  = 0            # LLM-call retries that happened within this turn
+    output_text:    str  = ""           # the agent's final message this turn (handoff payload)
+    llm_calls:      list[LLMCallRecord] = field(default_factory=list)
     # DAG fields — set by framework adapters that know structural relationships
     # (LangChain via parent_run_id, LangGraph via graph edges, etc.).
     # All None for sequential systems where no DAG information is available.
@@ -111,7 +159,8 @@ class RunSession:
     termination_reason: str  = ""
     status:             str  = "OK"
 
-    # Anthropic SDK patch deposits (start_ns, end_ns, inp, out, model) here.
+    # The Anthropic/OpenAI SDK patches deposit LLMCallRecord objects here
+    # (timing, tokens, model, and the full request/response payloads).
     # on_turn_end claims them and attaches to the current turn.
     _pending_api_calls: list = field(default_factory=list, repr=False)
     # When True, a framework adapter attributes each LLM call to its exact span
@@ -176,6 +225,7 @@ class RunSession:
         output_tokens:  int = 0,
         model:          str = "",
         status_value:   str = "",
+        output_text:    str = "",
         # Optional DAG fields, used when the framework adapter knows the
         # parent step but the turn was created lazily here (no on_turn_start).
         parent_step_id: Optional[str] = None,
@@ -209,11 +259,12 @@ class RunSession:
             if self._pending_api_calls:
                 calls = self._pending_api_calls[:]
                 self._pending_api_calls.clear()
-                self._current_turn.input_tokens  = sum(c[2] for c in calls)
-                self._current_turn.output_tokens = sum(c[3] for c in calls)
-                self._current_turn.model = calls[-1][4] if calls else model
+                self._current_turn.llm_calls.extend(calls)
+                self._current_turn.input_tokens  = sum(c.input_tokens for c in calls)
+                self._current_turn.output_tokens = sum(c.output_tokens for c in calls)
+                self._current_turn.model = calls[-1].model if calls else model
                 # Use actual LLM call start time for more accurate latency
-                api_start = min(c[0] for c in calls)
+                api_start = min(c.start_ns for c in calls)
                 if api_start < self._current_turn.start_ns:
                     self._current_turn.start_ns = api_start
             else:
@@ -223,6 +274,8 @@ class RunSession:
                 self._current_turn.model = model or self._current_turn.model
 
         self._current_turn.status_value = status_value
+        if output_text:
+            self._current_turn.output_text = output_text
         self._current_turn.close(now)
         self.turns.append(self._current_turn)
         self._current_turn = None
@@ -322,18 +375,29 @@ class RunSession:
     # -----------------------------------------------------------------------
     # Tool events
     # -----------------------------------------------------------------------
-    def on_tool_request(self, call_id: str, tool_name: str) -> None:
-        self._pending_tools[call_id] = (tool_name, time.time_ns())
+    def on_tool_request(self, call_id: str, tool_name: str,
+                        arguments=None) -> None:
+        args_json = "" if arguments is None else (
+            arguments if isinstance(arguments, str) else safe_json(arguments))
+        self._pending_tools[call_id] = (tool_name, time.time_ns(), args_json)
 
-    def on_tool_result(self, call_id: str, is_error: bool) -> None:
+    def on_tool_result(self, call_id: str, is_error: bool,
+                       result=None) -> None:
         if call_id not in self._pending_tools:
             return
-        tool_name, start_ns = self._pending_tools.pop(call_id)
+        pending = self._pending_tools.pop(call_id)
+        tool_name, start_ns = pending[0], pending[1]
+        args_json = pending[2] if len(pending) > 2 else ""
+        result_json = "" if result is None else (
+            result if isinstance(result, str) else safe_json(result))
         record = ToolRecord(
             tool_name=tool_name,
             success=not is_error,
             start_ns=start_ns,
             end_ns=time.time_ns(),
+            call_id=call_id,
+            arguments_json=args_json,
+            result_json=result_json,
         )
         if self._current_turn is not None:
             self._current_turn.tools.append(record)
@@ -355,13 +419,37 @@ class RunSession:
             if self._pending_api_calls and not self.per_call_attribution:
                 calls = self._pending_api_calls[:]
                 self._pending_api_calls.clear()
-                self._current_turn.input_tokens  = sum(c[2] for c in calls)
-                self._current_turn.output_tokens = sum(c[3] for c in calls)
+                self._current_turn.llm_calls.extend(calls)
+                self._current_turn.input_tokens  = sum(c.input_tokens for c in calls)
+                self._current_turn.output_tokens = sum(c.output_tokens for c in calls)
                 if calls:
-                    self._current_turn.model = calls[-1][4]
+                    self._current_turn.model = calls[-1].model
             self._current_turn.close(now)
             self.turns.append(self._current_turn)
             self._current_turn = None
+        # Under per-call attribution the tokens were routed to their spans by
+        # the framework adapter, but the SDK-level payload records were never
+        # claimed. Attach each to the turn whose window contains the call (by
+        # agent tag first, then time overlap) so the payloads aren't lost.
+        if self._pending_api_calls:
+            calls = self._pending_api_calls[:]
+            self._pending_api_calls.clear()
+            for c in calls:
+                target = None
+                if c.agent:
+                    candidates = [t for t in self.turns if t.agent_name == c.agent
+                                  and t.start_ns <= c.start_ns <= (t.end_ns or now)]
+                    target = candidates[-1] if candidates else None
+                if target is None:
+                    for t in self.turns:
+                        if t.start_ns <= c.start_ns <= (t.end_ns or now):
+                            target = t
+                            break
+                if target is None and self.turns:
+                    target = min(self.turns,
+                                 key=lambda t: abs(t.start_ns - c.start_ns))
+                if target is not None:
+                    target.llm_calls.append(c)
         self.end_ns = now
 
     # -----------------------------------------------------------------------

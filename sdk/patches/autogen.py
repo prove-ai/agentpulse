@@ -99,14 +99,20 @@ def _process_event(session: RunSession, event: Any) -> None:
         for call in (getattr(event, "content", None) or []):
             call_id   = getattr(call, "id",   "")
             tool_name = getattr(call, "name", "unknown")
-            session.on_tool_request(call_id, tool_name)
+            # FunctionCall.arguments is the JSON string the model produced —
+            # the exact request a replay must match against.
+            arguments = getattr(call, "arguments", None)
+            session.on_tool_request(call_id, tool_name, arguments=arguments)
 
     # ---- Tool results ----
     elif type_name == "ToolCallExecutionEvent":
         for result in (getattr(event, "content", None) or []):
             call_id  = getattr(result, "call_id",  "")
             is_error = getattr(result, "is_error", False)
-            session.on_tool_result(call_id, is_error)
+            # FunctionExecutionResult.content is what the tool returned —
+            # the value a replay serves back in `recorded` mode.
+            content  = getattr(result, "content", None)
+            session.on_tool_result(call_id, is_error, result=content)
 
     # ---- Phase 2: close turn on final agent message ----
     elif type_name in ("TextMessage", "ToolCallSummaryMessage"):
@@ -126,6 +132,7 @@ def _process_event(session: RunSession, event: Any) -> None:
 
         session.on_turn_end(
             src, inp, out, model, status_value,
+            output_text=content if isinstance(content, str) else str(content),
             parent_step_id=parent_step_id,
         )
 
