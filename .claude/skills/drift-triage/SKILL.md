@@ -1,6 +1,6 @@
 ---
 name: drift-triage
-description: Triage active agent drift across AgentPulse projects. Use when the user asks "what drifted today", "any drift", "check for regressions", "how are my agents doing", or wants a drift standup. Leads with the critical root cause, not raw metrics.
+description: Triage active agent drift across AgentPulse projects. Use when the user asks "what drifted today", "any drift", "check for regressions", "how are the agents doing", or wants a drift standup. Leads with the critical root cause, not raw metrics.
 ---
 
 # Drift triage

@@ -1,6 +1,6 @@
 ---
 name: release-regression-check
-description: Check whether a new version introduced a regression via AgentPulse version comparison. Use when the user asks "did my release break anything", "compare versions", "is v4 safe", "what changed since baseline", or names two versions to compare.
+description: Check whether a new version introduced a regression via AgentPulse version comparison. Use when the user asks "did the release break anything", "compare versions", "is v4 safe", "what changed since baseline", or names two versions to compare.
 ---
 
 # Release regression check
