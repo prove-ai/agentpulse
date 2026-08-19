@@ -4,33 +4,33 @@
 {% block content %}
 <style>
 /* ── Waterfall timeline ─────────────────────────────────────────── */
-.tl-row      { display:flex; align-items:center; padding:6px 0; border-bottom:1px solid #232b34; }
+.tl-row      { display:flex; align-items:center; padding:6px 0; border-bottom:1px solid #e3e6ee; }
 .tl-row:last-child { border-bottom:none; }
-.tl-name     { width:130px; flex-shrink:0; font-weight:600; font-size:0.88rem; color:#c9cfe6; }
-.tl-name .turn { color:#c6ccd2; font-weight:400; font-size:0.72rem; }
-.tl-track    { position:relative; flex-grow:1; height:30px; background:#161d24;
+.tl-name     { width:130px; flex-shrink:0; font-weight:600; font-size:0.88rem; color:#1f2430; }
+.tl-name .turn { color:#6b7280; font-weight:400; font-size:0.72rem; }
+.tl-track    { position:relative; flex-grow:1; height:30px; background:#f1f3f9;
                border-radius:5px; margin:0 14px; }
 .tl-bar      { position:absolute; top:4px; height:22px; border-radius:4px;
                display:flex; align-items:center; padding:0 8px; color:white;
                font-size:0.72rem; font-weight:600; white-space:nowrap; min-width:30px; }
-.tl-facts    { width:240px; flex-shrink:0; font-size:0.78rem; color:#c4c9ce; text-align:right; }
+.tl-facts    { width:240px; flex-shrink:0; font-size:0.78rem; color:#5b6478; text-align:right; }
 .tl-facts .io   { font-weight:600; }
-.tl-facts .in   { color:#63a2fe; }
-.tl-facts .out  { color:#a183d6; }
-.tl-facts .cost { color:#27d082; }
+.tl-facts .in   { color:#3949ab; }
+.tl-facts .out  { color:#6f42c1; }
+.tl-facts .cost { color:#1e7d4a; }
 .tl-axis     { display:flex; justify-content:space-between; font-size:0.7rem;
-               color:#c6ccd2; padding:2px 0 0 144px; }
+               color:#6b7280; padding:2px 0 0 144px; }
 
-.chip        { background:#131732; color:#6d7ace; border-radius:5px; padding:2px 9px;
+.chip        { background:#e6ebfa; color:#4653b8; border-radius:5px; padding:2px 9px;
                font-size:0.8rem; font-weight:600; }
-.tool-chip   { background:#393016; color:#d9a307; border-radius:4px; padding:1px 7px;
+.tool-chip   { background:#fdf3e2; color:#a86400; border-radius:4px; padding:1px 7px;
                font-size:0.72rem; font-weight:600; }
-.status-ok   { background:#13331d; color:#31af5f; border-radius:4px; padding:1px 8px; font-size:0.72rem; font-weight:600; }
-.status-fail { background:#301212; color:#d02f2f; border-radius:4px; padding:1px 8px; font-size:0.72rem; font-weight:600; }
-.drift-tag   { background:#301212; color:#d02f2f; border-radius:3px; padding:1px 6px; font-size:0.68rem; }
+.status-ok   { background:#e3f7ea; color:#1e7d4a; border-radius:4px; padding:1px 8px; font-size:0.72rem; font-weight:600; }
+.status-fail { background:#fdecec; color:#c22f2f; border-radius:4px; padding:1px 8px; font-size:0.72rem; font-weight:600; }
+.drift-tag   { background:#fdecec; color:#c22f2f; border-radius:3px; padding:1px 6px; font-size:0.68rem; }
 
 .ct td { padding:6px 8px; font-size:0.85rem; vertical-align:middle; }
-.ct th { font-size:0.74rem; text-transform:uppercase; letter-spacing:0.3px; color:#8b949b; }
+.ct th { font-size:0.74rem; text-transform:uppercase; letter-spacing:0.3px; color:#6b7280; }
 /* Align table edges with the card header / intro text (20px gutter) */
 .ct-aligned th:first-child, .ct-aligned td:first-child { padding-left:20px; }
 .ct-aligned th:last-child,  .ct-aligned td:last-child  { padding-right:20px; }
@@ -48,23 +48,23 @@
 <!-- ═══ INSIGHTS (the headline — what changed & does it matter) ═══ -->
 <style>
 .insight-card { display:flex; gap:12px; padding:12px 16px; border-radius:10px;
-                background:#131523; box-shadow:0 1px 5px rgba(0,0,0,0.14); margin-bottom:10px; }
+                background:#ffffff; box-shadow:0 1px 5px rgba(16,19,26,0.05); margin-bottom:10px; }
 .insight-body  { flex-grow:1; }
-.insight-title { font-weight:700; font-size:0.95rem; color:#c9cfe6; }
-.insight-evi   { font-size:0.82rem; color:#c4c9ce; margin:2px 0; font-variant-numeric:tabular-nums; }
-.insight-interp{ font-size:0.82rem; color:#8b949b; font-style:italic; }
+.insight-title { font-weight:700; font-size:0.95rem; color:#1f2430; }
+.insight-evi   { font-size:0.82rem; color:#5b6478; margin:2px 0; font-variant-numeric:tabular-nums; }
+.insight-interp{ font-size:0.82rem; color:#6b7280; font-style:italic; }
 .sev-badge     { border-radius:20px; padding:2px 10px; font-size:0.72rem; font-weight:700; }
-.sev-critical    { background:#301212; color:#d02f2f; }
-.sev-warning     { background:#312613; color:#d17f00; }
-.sev-improvement { background:#13331d; color:#31af5f; }
-.sev-info        { background:#12192f; color:#c4c7d6; }
+.sev-critical    { background:#fdecec; color:#c22f2f; }
+.sev-warning     { background:#fdf3e2; color:#a86400; }
+.sev-improvement { background:#e3f7ea; color:#1e7d4a; }
+.sev-info        { background:#eef1f8; color:#5b6478; }
 /* Route-diff disclosure — keeps the agent-name wall hidden until asked for */
 .route-diff      { margin-top:4px; }
-.route-diff > summary { font-size:0.8rem; color:#6d7ace; cursor:pointer; width:max-content; }
-.route-diff-body { font-size:0.8rem; color:#c4c9ce; margin-top:6px;
+.route-diff > summary { font-size:0.8rem; color:#4653b8; cursor:pointer; width:max-content; }
+.route-diff-body { font-size:0.8rem; color:#5b6478; margin-top:6px;
                    font-variant-numeric:tabular-nums; }
-.diff-add { color:#31af5f; font-weight:600; }
-.diff-rem { color:#d02f2f; font-weight:600; }
+.diff-add { color:#1e7d4a; font-weight:600; }
+.diff-rem { color:#c22f2f; font-weight:600; }
 </style>
 
 <div class="card mb-4">
@@ -77,7 +77,7 @@
       {% if ins_counts.info %}<span class="sev-badge sev-info ms-1">{{ ins_counts.info }} info</span>{% endif %}
     </span>
   </div>
-  <div class="card-body" style="background:#161d24;">
+  <div class="card-body" style="background:#f7f8fc;">
     {% for ins in insights %}
     <div class="insight-card {{ ins.severity }}">
       <div class="insight-body">
@@ -133,9 +133,9 @@
     (metrics.total_tool_calls, "Tool calls", "#fd7e14"),
   ] %}
   <div class="col-6 col-md-2">
-    <div style="background:#131523;border-radius:8px;padding:12px;box-shadow:0 1px 5px rgba(0,0,0,0.14);text-align:center;">
+    <div style="background:#ffffff;border-radius:8px;padding:12px;box-shadow:0 1px 5px rgba(16,19,26,0.05);text-align:center;">
       <div style="font-size:1.4rem;font-weight:700;color:{{ color }};">{{ val }}</div>
-      <div style="font-size:0.66rem;color:#8b949b;text-transform:uppercase;">{{ label }}</div>
+      <div style="font-size:0.66rem;color:#6b7280;text-transform:uppercase;">{{ label }}</div>
     </div>
   </div>
   {% endfor %}
@@ -152,7 +152,7 @@
       <span class="text-secondary small">— each bar shows when an agent ran and how long it took</span>
     </span>
     <span title="Parallelism factor = sum of all agent durations ÷ wall-clock time.&#10;1.0 = fully sequential. >1.0 = agents overlapped in time.&#10;e.g. 2.0 means roughly 2 agents ran in parallel on average."
-          style="font-size:0.78rem; background:{{ '#28a745' if is_parallel else ('#fd7e14' if is_partial else '#495057') }}; padding:3px 10px; border-radius:14px; font-weight:600; cursor:help;">
+          style="font-size:0.78rem; background:{{ '#28a745' if is_parallel else ('#fd7e14' if is_partial else '#495057') }}; color:#fff; padding:3px 10px; border-radius:14px; font-weight:600; cursor:help;">
       Parallelism {{ "%.2f"|format(pf) }}×
       {% if is_parallel %} · parallel{% elif is_partial %} · partial overlap{% else %} · sequential{% endif %}
     </span>
@@ -192,13 +192,13 @@
   </div>
   <div class="card-body">
     <div id="agentGraph" style="height:280px; width:100%;"></div>
-    <div class="d-flex gap-3 flex-wrap mt-2" style="font-size:0.74rem;color:#8b949b;">
-      <span><span style="display:inline-block;width:11px;height:11px;background:#11172c;border:1px solid #3949ab;border-radius:2px;"></span> normal</span>
-      <span><span style="display:inline-block;width:11px;height:11px;background:#173d20;border:2px solid #28a745;border-radius:2px;"></span> finished (APPROVED)</span>
-      <span><span style="display:inline-block;width:11px;height:11px;background:#381518;border:2px solid #dc3545;border-radius:2px;"></span> did not finish cleanly</span>
-      <span><span style="display:inline-block;width:11px;height:11px;background:#15171e;border:2px solid #dc3545;border-radius:2px;"></span> drifted vs baseline</span>
-      <span><span style="display:inline-block;width:11px;height:11px;background:#393016;border:1px solid #fd7e14;border-radius:2px;"></span> unexpected re-entry</span>
-      <span style="border-top:2px dashed #47525c;width:22px;display:inline-block;margin-bottom:3px;"></span> requested loop-back
+    <div class="d-flex gap-3 flex-wrap mt-2" style="font-size:0.74rem;color:#6b7280;">
+      <span><span style="display:inline-block;width:11px;height:11px;background:#eef1f8;border:1px solid #3949ab;border-radius:2px;"></span> normal</span>
+      <span><span style="display:inline-block;width:11px;height:11px;background:#e3f7ea;border:2px solid #28a745;border-radius:2px;"></span> finished (APPROVED)</span>
+      <span><span style="display:inline-block;width:11px;height:11px;background:#fdecec;border:2px solid #dc3545;border-radius:2px;"></span> did not finish cleanly</span>
+      <span><span style="display:inline-block;width:11px;height:11px;background:#ffffff;border:2px solid #dc3545;border-radius:2px;"></span> drifted vs baseline</span>
+      <span><span style="display:inline-block;width:11px;height:11px;background:#fdf3e2;border:1px solid #fd7e14;border-radius:2px;"></span> unexpected re-entry</span>
+      <span style="border-top:2px dashed #b0b6c3;width:22px;display:inline-block;margin-bottom:3px;"></span> requested loop-back
     </div>
   </div>
 </div>
@@ -207,12 +207,12 @@
 {% if parallel_groups %}
 <div class="card mb-4">
   <div class="card-header card-header-soft d-flex justify-content-between">
-    <span>⚡ Parallel Groups <span class="small text-white-50">({{ parallel_groups|length }})</span></span>
+    <span>⚡ Parallel Groups <span class="small text-muted">({{ parallel_groups|length }})</span></span>
     {% if has_critical_path %}
-    <span class="small text-white-50">workflow critical path highlighted in graph above</span>
+    <span class="small text-muted">workflow critical path highlighted in graph above</span>
     {% endif %}
   </div>
-  <div class="card-body" style="background:#161d24;">
+  <div class="card-body" style="background:#f7f8fc;">
     {% for g in parallel_groups %}
     {# Border tier mirrors the efficiency number's colour (Bootstrap text-success/warning/danger) #}
     {% set eff_color = '#28a745' if g.efficiency >= 0.85 else ('#ffc107' if g.efficiency >= 0.6 else '#dc3545') %}
@@ -236,7 +236,7 @@
             </div>
           </div>
           <div class="text-end">
-            <div class="fw-bold" style="font-size:1.3rem;color:#27d082;">{{ "%.1f"|format(g.wall_clock_ms/1000) }}s</div>
+            <div class="fw-bold" style="font-size:1.3rem;color:#1e7d4a;">{{ "%.1f"|format(g.wall_clock_ms/1000) }}s</div>
             <div class="text-muted small">wall clock</div>
           </div>
         </div>
@@ -267,7 +267,7 @@
               {% endif %}
               <td>
                 {% if b.branch_id == bb.branch_id %}
-                  <span style="background:#381518;color:#b82d3a;border-radius:4px;padding:1px 8px;font-size:.72rem;font-weight:700;">⏱ Bottleneck</span>
+                  <span style="background:#fdecec;color:#c22f2f;border-radius:4px;padding:1px 8px;font-size:.72rem;font-weight:700;">⏱ Bottleneck</span>
                 {% elif g.has_join %}
                   <span class="text-muted small">waiting</span>
                 {% endif %}
