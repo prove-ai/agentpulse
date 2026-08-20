@@ -18,18 +18,27 @@ Content mapping, chosen to round-trip through the replay harness:
     with content blocks (text / tool_use) verbatim from the recorded response.
 
 Usage:
-    python storage/otel_export.py <run_id | --last> [--db NAME]
+    python storage/otel_export.py <run_id | --last | --since WHEN> [--db NAME]
         [-o FILE] [--submit [URL]]
 
 With no -o the export prints to stdout. --submit POSTs it to a replay
 server's /api/ingest (default http://localhost:4951).
+
+--since selects every run in a period (12h, 90m, 7d, or an ISO
+date/datetime; naive values read as local time) and handles each run
+separately: one submission per run with --submit, one file per run into
+the -o directory, or a dry list of what it found with neither. The
+replay server dedupes submissions by content, so overlapping periods
+are safe to resend.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 _OBS_ROOT = Path(__file__).parent.parent
@@ -276,6 +285,36 @@ def _last_run_id(db_path: Path | None) -> str | None:
     return row[0] if row else None
 
 
+def _since_cutoff(text: str) -> str:
+    """A --since value as a UTC ISO cutoff comparable to runs.timestamp.
+    Accepts 90m / 12h / 7d shorthand, or an ISO date/datetime (naive
+    values are read as local time)."""
+    m = re.fullmatch(r"(\d+)([mhd])", text.strip())
+    if m:
+        n = int(m.group(1))
+        delta = {"m": timedelta(minutes=n), "h": timedelta(hours=n),
+                 "d": timedelta(days=n)}[m.group(2)]
+        return (datetime.now(timezone.utc) - delta).isoformat()
+    try:
+        dt = datetime.fromisoformat(text.strip())
+    except ValueError:
+        raise SystemExit(
+            f"--since {text!r} is neither a span like 12h / 90m / 7d "
+            f"nor an ISO date/datetime like 2026-08-18 or 2026-08-18T14:00")
+    if dt.tzinfo is None:
+        dt = dt.astimezone()                 # a naive value is local time
+    return dt.astimezone(timezone.utc).isoformat()
+
+
+def _runs_since(db_path: Path | None, cutoff: str) -> list[dict]:
+    conn = get_connection(db_path)
+    rows = [dict(r) for r in conn.execute(
+        "SELECT run_id, timestamp, task_text FROM runs "
+        "WHERE timestamp >= ? ORDER BY timestamp", (cutoff,))]
+    conn.close()
+    return rows
+
+
 def _submit(export: dict, url: str) -> str:
     import urllib.request
     req = urllib.request.Request(
@@ -291,20 +330,54 @@ def main() -> int:
     ap.add_argument("run_id", nargs="?", help="run to export")
     ap.add_argument("--last", action="store_true",
                     help="export the most recent run")
+    ap.add_argument("--since", default=None, metavar="WHEN",
+                    help="every run since WHEN (12h, 90m, 7d, or an ISO "
+                         "date/datetime), each handled as its own export")
     ap.add_argument("--db", default=None,
                     help="logical DB name (as passed to instrument(db_name=...))")
-    ap.add_argument("-o", "--out", default=None, help="write to FILE")
+    ap.add_argument("-o", "--out", default=None,
+                    help="write to FILE (a directory with --since)")
     ap.add_argument("--submit", nargs="?", const="http://localhost:4951",
                     default=None, metavar="URL",
                     help="POST the export to a replay server's /api/ingest")
     args = ap.parse_args()
 
     db_path = resolve_db_path(args.db) if args.db else None
+
+    if args.since:
+        if args.run_id or args.last:
+            ap.error("--since selects the runs itself; drop run_id / --last")
+        cutoff = _since_cutoff(args.since)
+        runs = _runs_since(db_path, cutoff)
+        if not runs:
+            print(f"no runs since {cutoff}", file=sys.stderr)
+            return 1
+        out_dir = Path(args.out) if args.out else None
+        if out_dir:
+            out_dir.mkdir(parents=True, exist_ok=True)
+        for r in runs:
+            label = f"{r['run_id']}  {r['timestamp']}"
+            if not out_dir and not args.submit:
+                print(label)                 # dry list: what a real pass sends
+                continue
+            export = export_run(r["run_id"], db_path)
+            if out_dir:
+                f = out_dir / f"{r['run_id']}.json"
+                f.write_text(json.dumps(export, indent=2, ensure_ascii=False))
+                print(f"wrote {f}", file=sys.stderr)
+            if args.submit:
+                reply = _submit(export, args.submit)
+                print(f"{label} -> {reply}", file=sys.stderr)
+        if not out_dir and not args.submit:
+            print(f"{len(runs)} run(s) since {cutoff}; add --submit to "
+                  f"send each as its own submission", file=sys.stderr)
+        return 0
+
     run_id = args.run_id
     if args.last and not run_id:
         run_id = _last_run_id(db_path)
     if not run_id:
-        ap.error("pass a run_id or --last")
+        ap.error("pass a run_id, --last, or --since")
 
     export = export_run(run_id, db_path)
     text = json.dumps(export, indent=2, ensure_ascii=False)
