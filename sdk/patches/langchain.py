@@ -249,6 +249,15 @@ class _ObservabilityCallback:
                 if session is None:
                     return
 
+                # A chain nested inside an already-tracked turn is that
+                # turn's internals, not a new agent: create_react_agent
+                # runs its own `model` and `tools` nodes inside the node
+                # that owns it, and promoting those to turns duplicates
+                # every step (tokens on the inner node, payloads on the
+                # outer). Attribute everything nested to the owner.
+                if self._nearest_tracked_ancestor(parent_run_id) is not None:
+                    return
+
                 # Compute DAG fields BEFORE opening the turn so they go in
                 # the TurnData at creation time.
                 parent_step_id = self._nearest_tracked_ancestor(parent_run_id)
@@ -389,24 +398,33 @@ class _ObservabilityCallback:
                     self._open_turns.clear()
 
             # -- tool lifecycle ----------------------------------------------------
+            # The callback hands us the tool's input and output; forward
+            # both so the recording carries what a replay needs.
             def on_tool_start(self, serialized, input_str, *, run_id, parent_run_id=None, **kwargs):
                 session = get_active_session()
                 if session is None:
                     return
                 tool_name = (serialized or {}).get("name") or kwargs.get("name") or "unknown"
-                session.on_tool_request(str(run_id), tool_name)
+                arguments = kwargs.get("inputs")
+                if arguments is None:
+                    arguments = input_str
+                session.on_tool_request(str(run_id), tool_name,
+                                        arguments=arguments)
 
             def on_tool_end(self, output, *, run_id, parent_run_id=None, **kwargs):
                 session = get_active_session()
                 if session is None:
                     return
-                session.on_tool_result(str(run_id), is_error=False)
+                result = getattr(output, "content", output)
+                session.on_tool_result(str(run_id), is_error=False,
+                                       result=result)
 
             def on_tool_error(self, error, *, run_id, parent_run_id=None, **kwargs):
                 session = get_active_session()
                 if session is None:
                     return
-                session.on_tool_result(str(run_id), is_error=True)
+                session.on_tool_result(str(run_id), is_error=True,
+                                       result=f"{type(error).__name__}: {error}")
 
             # -- agent lifecycle ---------------------------------------------------
             def on_agent_finish(self, finish, *, run_id, parent_run_id=None, **kwargs):
@@ -585,9 +603,15 @@ def _extract_usage(response: Any) -> tuple[int, int, str]:
 def _extract_task(inputs: Any) -> str:
     """Best-effort extraction of the user task text from chain inputs."""
     if isinstance(inputs, dict):
-        for key in ("input", "question", "query", "task", "prompt", "text"):
+        for key in ("input", "question", "query", "task", "prompt", "text",
+                    "claim"):
             if key in inputs and isinstance(inputs[key], str):
                 return inputs[key]
+        # a state dict with exactly one string field IS the task, whatever
+        # the field is called — never stringify the whole dict in that case
+        strings = [v for v in inputs.values() if isinstance(v, str)]
+        if len(strings) == 1:
+            return strings[0]
         if "messages" in inputs and isinstance(inputs["messages"], list) and inputs["messages"]:
             last = inputs["messages"][-1]
             content = getattr(last, "content", None)

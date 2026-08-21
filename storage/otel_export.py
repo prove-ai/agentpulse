@@ -18,18 +18,19 @@ Content mapping, chosen to round-trip through the replay harness:
     with content blocks (text / tool_use) verbatim from the recorded response.
 
 Usage:
-    python storage/otel_export.py <run_id | --last | --since WHEN> [--db NAME]
-        [-o FILE] [--submit [URL]]
+    python3 storage/otel_export.py <run_id | --last [N] | --since WHEN>
+        [--db NAME] [-o FILE] [--submit [URL]]
 
 With no -o the export prints to stdout. --submit POSTs it to a replay
 server's /api/ingest (default http://localhost:4951).
 
---since selects every run in a period (12h, 90m, 7d, or an ISO
-date/datetime; naive values read as local time) and handles each run
-separately: one submission per run with --submit, one file per run into
-the -o directory, or a dry list of what it found with neither. The
-replay server dedupes submissions by content, so overlapping periods
-are safe to resend.
+A run_id exports that run; --last the most recent one. --last N selects
+the N most recent runs and --since every run in a period (12h, 90m, 7d,
+or an ISO date/datetime; naive values read as local time); both handle
+each run separately: one submission per run with --submit, one file per
+run into the -o directory, or a dry list of what they found with
+neither. The replay server dedupes submissions by content, so
+overlapping selections are safe to resend.
 """
 
 from __future__ import annotations
@@ -315,6 +316,15 @@ def _runs_since(db_path: Path | None, cutoff: str) -> list[dict]:
     return rows
 
 
+def _last_runs(db_path: Path | None, n: int) -> list[dict]:
+    conn = get_connection(db_path)
+    rows = [dict(r) for r in conn.execute(
+        "SELECT run_id, timestamp, task_text FROM runs "
+        "ORDER BY timestamp DESC LIMIT ?", (n,))]
+    conn.close()
+    return rows[::-1]                        # oldest first, like --since
+
+
 def _submit(export: dict, url: str) -> str:
     import urllib.request
     req = urllib.request.Request(
@@ -325,18 +335,45 @@ def _submit(export: dict, url: str) -> str:
         return resp.read().decode()
 
 
+def _export_many(runs: list[dict], db_path, args, what: str) -> int:
+    """Handle a multi-run selection: one submission per run, one file
+    per run into the -o directory, or a dry list with neither."""
+    out_dir = Path(args.out) if args.out else None
+    if out_dir:
+        out_dir.mkdir(parents=True, exist_ok=True)
+    for r in runs:
+        label = f"{r['run_id']}  {r['timestamp']}"
+        if not out_dir and not args.submit:
+            print(label)                     # dry list: what a real pass sends
+            continue
+        export = export_run(r["run_id"], db_path)
+        if out_dir:
+            f = out_dir / f"{r['run_id']}.json"
+            f.write_text(json.dumps(export, indent=2, ensure_ascii=False))
+            print(f"wrote {f}", file=sys.stderr)
+        if args.submit:
+            reply = _submit(export, args.submit)
+            print(f"{label} -> {reply}", file=sys.stderr)
+    if not out_dir and not args.submit:
+        print(f"{len(runs)} run(s) {what}; add --submit to "
+              f"send each as its own submission", file=sys.stderr)
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("run_id", nargs="?", help="run to export")
-    ap.add_argument("--last", action="store_true",
-                    help="export the most recent run")
+    ap.add_argument("--last", nargs="?", const=1, type=int, default=None,
+                    metavar="N",
+                    help="export the most recent run, or with a count the "
+                         "last N runs, each handled as its own export")
     ap.add_argument("--since", default=None, metavar="WHEN",
                     help="every run since WHEN (12h, 90m, 7d, or an ISO "
                          "date/datetime), each handled as its own export")
     ap.add_argument("--db", default=None,
                     help="logical DB name (as passed to instrument(db_name=...))")
     ap.add_argument("-o", "--out", default=None,
-                    help="write to FILE (a directory with --since)")
+                    help="write to FILE (a directory with --since or --last N)")
     ap.add_argument("--submit", nargs="?", const="http://localhost:4951",
                     default=None, metavar="URL",
                     help="POST the export to a replay server's /api/ingest")
@@ -344,37 +381,31 @@ def main() -> int:
 
     db_path = resolve_db_path(args.db) if args.db else None
 
+    if args.last is not None and args.last < 1:
+        ap.error("--last needs a positive count")
+
     if args.since:
-        if args.run_id or args.last:
+        if args.run_id or args.last is not None:
             ap.error("--since selects the runs itself; drop run_id / --last")
         cutoff = _since_cutoff(args.since)
         runs = _runs_since(db_path, cutoff)
         if not runs:
             print(f"no runs since {cutoff}", file=sys.stderr)
             return 1
-        out_dir = Path(args.out) if args.out else None
-        if out_dir:
-            out_dir.mkdir(parents=True, exist_ok=True)
-        for r in runs:
-            label = f"{r['run_id']}  {r['timestamp']}"
-            if not out_dir and not args.submit:
-                print(label)                 # dry list: what a real pass sends
-                continue
-            export = export_run(r["run_id"], db_path)
-            if out_dir:
-                f = out_dir / f"{r['run_id']}.json"
-                f.write_text(json.dumps(export, indent=2, ensure_ascii=False))
-                print(f"wrote {f}", file=sys.stderr)
-            if args.submit:
-                reply = _submit(export, args.submit)
-                print(f"{label} -> {reply}", file=sys.stderr)
-        if not out_dir and not args.submit:
-            print(f"{len(runs)} run(s) since {cutoff}; add --submit to "
-                  f"send each as its own submission", file=sys.stderr)
-        return 0
+        return _export_many(runs, db_path, args, f"since {cutoff}")
+
+    if args.last is not None and args.last > 1:
+        if args.run_id:
+            ap.error("--last N selects the runs itself; drop run_id")
+        runs = _last_runs(db_path, args.last)
+        if not runs:
+            print("no runs recorded", file=sys.stderr)
+            return 1
+        return _export_many(runs, db_path, args,
+                            f"(the {len(runs)} most recent)")
 
     run_id = args.run_id
-    if args.last and not run_id:
+    if args.last is not None and not run_id:
         run_id = _last_run_id(db_path)
     if not run_id:
         ap.error("pass a run_id, --last, or --since")
