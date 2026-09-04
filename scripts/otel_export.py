@@ -18,7 +18,7 @@ Content mapping, chosen to round-trip through the replay harness:
     with content blocks (text / tool_use) verbatim from the recorded response.
 
 Usage:
-    python3 storage/otel_export.py <run_id | --last [N] | --since WHEN>
+    python3 scripts/otel_export.py <run_id | --last [N] | --since WHEN>
         [--db NAME] [-o FILE] [--submit [URL]]
 
 With no -o the export prints to stdout. --submit POSTs it to a replay
