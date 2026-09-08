@@ -35,7 +35,7 @@ from uuid import UUID
 
 from agentpulse.sdk.session import (
     RunSession, get_config, get_active_session,
-    set_active_session, clear_active_session, parse_status_value,
+    set_active_session, clear_active_session, parse_status_value, safe_json,
 )
 from agentpulse.storage.sqlite_store import write_session
 
@@ -342,18 +342,22 @@ class _ObservabilityCallback:
                     cur = session._current_turn
                     if cur is not None and cur.agent_name == agent_name:
                         status_value = _status_from_outputs(outputs)
-                        session.on_turn_end(agent_name, status_value=status_value)
+                        session.on_turn_end(agent_name, status_value=status_value,
+                                            output_text=_text_from_outputs(outputs))
                     elif span_id:
                         # Out-of-order (parallel) close. The turn may have been
                         # closed prematurely when a sibling started — stamp THIS
                         # node's real end time on its span so the duration reflects
                         # actual wall-clock (concurrent branches overlap correctly).
                         sv = _status_from_outputs(outputs)
+                        out_text = _text_from_outputs(outputs)
                         for t in session.turns:
                             if t.span_id == span_id:
                                 t.end_ns = now
                                 if sv:
                                     t.status_value = sv
+                                if out_text:
+                                    t.output_text = out_text
                                 break
 
                 # Root chain finished → finalise and persist the session.
@@ -618,6 +622,56 @@ def _extract_task(inputs: Any) -> str:
     if isinstance(inputs, str):
         return inputs
     return str(inputs)[:500]
+
+
+def _message_text(msg: Any) -> str:
+    """Best-effort text of one LangChain message (or message-like dict)."""
+    content = getattr(msg, "content", None)
+    if content is None and isinstance(msg, dict):
+        content = msg.get("content")
+    if content is None:
+        return str(msg) if msg is not None else ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        # Anthropic-style content blocks: join the text parts.
+        parts = []
+        for block in content:
+            text = getattr(block, "text", None) or \
+                (block.get("text") if isinstance(block, dict) else None)
+            if text:
+                parts.append(text)
+        return "\n".join(parts) if parts else safe_json(content)
+    return str(content)
+
+
+def _text_from_outputs(outputs: Any) -> str:
+    """The node's output as text — the agent's final message when one exists.
+
+    LangGraph nodes return a state delta (usually a dict). The common shape is
+    {"messages": [...]} via the append reducer: take the last message. Otherwise
+    prefer an obvious string field, and fall back to the serialized delta so the
+    exact output is never lost.
+    """
+    try:
+        if outputs is None:
+            return ""
+        if isinstance(outputs, str):
+            return outputs
+        if isinstance(outputs, dict):
+            msgs = outputs.get("messages")
+            if isinstance(msgs, (list, tuple)) and msgs:
+                return _message_text(msgs[-1])
+            if msgs is not None and not isinstance(msgs, (list, tuple)):
+                return _message_text(msgs)
+            for key in ("output", "response", "result", "answer", "text", "content"):
+                val = outputs.get(key)
+                if isinstance(val, str) and val:
+                    return val
+            return safe_json(outputs)
+        return _message_text(outputs)
+    except Exception:
+        return ""  # capture must never break the run
 
 
 def _status_from_outputs(outputs: Any) -> str:
