@@ -16,7 +16,7 @@
 
   /* Navigation cards */
   .nav-cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(230px,1fr)); gap:16px; }
-  .nav-card { display:block; background:#ffffff; border:1px solid #e3e6ee; border-radius:12px; padding:18px 20px;
+  .nav-card { display:flex; flex-direction:column; background:#ffffff; border:1px solid #e3e6ee; border-radius:12px; padding:18px 20px;
               text-decoration:none; color:#1f2430; box-shadow:0 2px 8px rgba(16,19,26,0.05);
               transition:box-shadow .15s, border-color .15s, transform .12s; }
   .nav-card:hover { box-shadow:0 8px 20px rgba(16,19,26,0.08); border-color:#c9d0e2; transform:translateY(-2px); }
@@ -25,7 +25,7 @@
   .nav-card .nc-ico svg { width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
   .nav-card .nc-title { font-weight:700; font-size:1.02rem; }
   .nav-card .nc-desc { font-size:.84rem; color:#6b7280; }
-  .nav-card .nc-stat { margin-top:10px; font-size:.8rem; font-weight:600; color:#3949ab; text-align:right; }
+  .nav-card .nc-stat { margin-top:auto; padding-top:12px; font-size:.8rem; font-weight:600; color:#3949ab; text-align:right; }
   .nav-card .nc-stat .bad { color:#d04b57; }
 
   /* Top signals */
