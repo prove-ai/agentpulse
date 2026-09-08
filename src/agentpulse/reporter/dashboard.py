@@ -1224,7 +1224,7 @@ _NODE_STYLES = {
     "normal":   {"bg": "#eef2ff", "border": "#3949ab", "bw": 1},
     "approved": {"bg": "#d4edda", "border": "#28a745", "bw": 3},
     "failed":   {"bg": "#f8d7da", "border": "#dc3545", "bw": 3},
-    "drift":    {"bg": "#ffffff", "border": "#dc3545", "bw": 4},
+    "drift":    {"bg": "#ffffff", "border": "#d9534f", "bw": 1.5},
     "loop":     {"bg": "#fff3cd", "border": "#fd7e14", "bw": 3},
 }
 
@@ -1417,10 +1417,10 @@ def build_graph_data(timeline: list[dict], handoffs: list[dict], drifted_agents:
             cls = "normal"
         st = _NODE_STYLES[cls]
 
-        # Critical-path styling overrides border to red & thick (keep fill from cls).
+        # Critical-path styling overrides the border to a light red (keep fill from cls).
         if on_critical and has_dag:
-            border = "#dc3545"
-            bw = max(st["bw"], 4)
+            border = "#d9534f"
+            bw = 1.5
         else:
             border = st["border"]
             bw = st["bw"]
@@ -1517,9 +1517,9 @@ def build_graph_data(timeline: list[dict], handoffs: list[dict], drifted_agents:
                 "label": "",
                 "title": tooltip,
                 "dashes": False,
-                "color":  {"color": "#dc3545" if both_critical else "#b0b6c3",
-                           "highlight": "#dc3545" if both_critical else "#3949ab"},
-                "width":  3 if both_critical else 1,
+                "color":  {"color": "#d9534f" if both_critical else "#b0b6c3",
+                           "highlight": "#d9534f" if both_critical else "#3949ab"},
+                "width":  1.5 if both_critical else 1,
             })
 
         # Are there parent-less parallel branches? If so, add a virtual "Run
@@ -1808,9 +1808,14 @@ def build_run_insights(run: dict, metrics: dict, all_runs: list[dict],
                                    base_version, cur_version)
         version_ins = version_insights(vreport)
 
+    # Single-run-vs-baseline signals are variance, not drift; only the
+    # unmistakable ones (critical) earn a place on the insights card. The
+    # full statistical judgment lives in Drift Investigation.
+    obvious_anomalies = [i for i in anomaly_insights(metrics, baseline_metrics)
+                         if i.severity == "critical"]
     combined = (single_run_insights(metrics)
                 + version_ins
-                + anomaly_insights(metrics, baseline_metrics))
+                + obvious_anomalies)
     seen, deduped = set(), []
     for ins in combined:
         if ins.title in seen:
@@ -2070,8 +2075,6 @@ def run_detail(run_id_prefix: str):
         insights=insights,
         ins_counts=ins_counts,
         graph_data=json.dumps(graph_data),
-        report=report,
-        has_baseline=len(baseline_metrics) > 0,
         vreport=vreport,
         base_version=base_version,
         parallel_groups=parallel_groups,
@@ -3374,6 +3377,131 @@ def version_snapshot():
 @app.route("/api/runs")
 def api_runs():
     return jsonify(list_runs(limit=200))
+
+
+# ---------------------------------------------------------------------------
+# Trace view — Langfuse-style span tree + payload inspector for one run.
+# The tree (turns → LLM calls / tool calls) is embedded; payloads are fetched
+# lazily per node because a run's request/response bodies can be megabytes.
+# ---------------------------------------------------------------------------
+@app.route("/run/<run_id_prefix>/trace")
+def run_trace(run_id_prefix: str):
+    from agentpulse.analysis.layer1_raw import get_llm_call_meta
+    all_runs = list_runs(limit=200)
+    matched = [r for r in all_runs if r["run_id"].startswith(run_id_prefix)]
+    if not matched:
+        abort(404)
+    run = matched[0]
+    run_id = run["run_id"]
+
+    spans = get_agent_spans(run_id)
+    calls = get_llm_call_meta(run_id)
+    tools = get_tool_calls(run_id)
+    calls_by_span: dict = {}
+    for c in calls:
+        calls_by_span.setdefault(c.get("span_id"), []).append(c)
+    tools_by_span: dict = {}
+    for t in tools:
+        tools_by_span.setdefault(t.get("span_id"), []).append(t)
+
+    tree = []
+    for sp in spans:
+        sid = sp.get("span_id")
+        children = []
+        for c in calls_by_span.get(sid, []):
+            dur = (c.get("end_time_ms") or 0) - (c.get("start_time_ms") or 0)
+            children.append({
+                "kind": "llm", "id": c["call_id"],
+                "label": c.get("model") or "LLM call",
+                "in": c.get("input_tokens") or 0, "out": c.get("output_tokens") or 0,
+                "ms": round(dur), "start": c.get("start_time_ms") or 0,
+            })
+        for t in tools_by_span.get(sid, []):
+            children.append({
+                "kind": "tool", "id": t["call_id"],
+                "label": t.get("tool_name") or "tool",
+                "ok": bool(t.get("success")),
+                "ms": round(t.get("duration_ms") or 0),
+                "start": t.get("start_time_ms") or 0,
+            })
+        children.sort(key=lambda x: x.get("start") or 0)
+        tree.append({
+            "kind": "span", "id": sid,
+            "agent": sp.get("agent_name") or "?",
+            "turn": sp.get("turn_index"),
+            "ms": round(sp.get("duration_ms") or 0),
+            "in": sp.get("input_tokens") or 0, "out": sp.get("output_tokens") or 0,
+            "model": sp.get("model") or "",
+            "status": sp.get("status") or "OK",
+            "branch": sp.get("branch_id") or "",
+            "children": children,
+        })
+
+    return render_template(
+        "trace.html",
+        run_id=run_id, task_text=run.get("task_text", ""),
+        task_type=run.get("task_type") or "—",
+        timestamp=run.get("timestamp", ""),
+        tree_json=json.dumps(tree),
+    )
+
+
+@app.route("/api/trace/<run_id>/llm/<call_id>")
+def api_trace_llm(run_id: str, call_id: str):
+    from agentpulse.analysis.layer1_raw import get_llm_call_payload
+    row = get_llm_call_payload(call_id, run_id)
+    if row is None:
+        abort(404)
+
+    def _parse(text):
+        try:
+            return json.loads(text) if text else None
+        except Exception:
+            return text
+    return jsonify({
+        "request":  _parse(row.get("request_json")),
+        "response": _parse(row.get("response_json")),
+        "model": row.get("model"),
+        "input_tokens": row.get("input_tokens"),
+        "output_tokens": row.get("output_tokens"),
+        "duration_ms": round((row.get("end_time_ms") or 0) - (row.get("start_time_ms") or 0)),
+    })
+
+
+@app.route("/api/trace/<run_id>/tool/<call_id>")
+def api_trace_tool(run_id: str, call_id: str):
+    from agentpulse.analysis.layer1_raw import get_tool_call_payload
+    row = get_tool_call_payload(call_id, run_id)
+    if row is None:
+        abort(404)
+
+    def _parse(text):
+        try:
+            return json.loads(text) if text else None
+        except Exception:
+            return text
+    return jsonify({
+        "tool_name": row.get("tool_name"), "success": bool(row.get("success")),
+        "duration_ms": round(row.get("duration_ms") or 0),
+        "arguments": _parse(row.get("arguments_json")),
+        "result": _parse(row.get("result_json")),
+    })
+
+
+@app.route("/api/trace/<run_id>/span/<span_id>")
+def api_trace_span(run_id: str, span_id: str):
+    from agentpulse.storage.sqlite_store import get_connection
+    conn = get_connection()
+    row = conn.execute(
+        """SELECT agent_name, output_text, status, status_value, model,
+                  input_tokens, output_tokens, duration_ms
+           FROM spans WHERE span_id = ? AND run_id = ?""",
+        (span_id, run_id),
+    ).fetchone()
+    if row is None:
+        abort(404)
+    d = dict(row)
+    return jsonify(d)
 
 
 # ---------------------------------------------------------------------------

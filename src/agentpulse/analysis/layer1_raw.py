@@ -91,3 +91,41 @@ def get_handoffs(run_id: str, db_path: Path | None = None) -> list[dict]:
         (run_id,),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def get_llm_call_meta(run_id: str, db_path: Path | None = None) -> list[dict]:
+    """LLM calls of a run, metadata only (payloads are fetched lazily by id)."""
+    conn = get_connection(db_path)
+    rows = conn.execute(
+        """SELECT call_id, span_id, call_index, start_time_ms, end_time_ms,
+                  input_tokens, output_tokens, model,
+                  LENGTH(request_json)  AS request_bytes,
+                  LENGTH(response_json) AS response_bytes
+           FROM llm_calls WHERE run_id = ?
+           ORDER BY start_time_ms, call_index""",
+        (run_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_llm_call_payload(call_id: str, run_id: str,
+                         db_path: Path | None = None) -> dict | None:
+    conn = get_connection(db_path)
+    row = conn.execute(
+        """SELECT request_json, response_json, model, input_tokens, output_tokens,
+                  start_time_ms, end_time_ms
+           FROM llm_calls WHERE call_id = ? AND run_id = ?""",
+        (call_id, run_id),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def get_tool_call_payload(call_id: str, run_id: str,
+                          db_path: Path | None = None) -> dict | None:
+    conn = get_connection(db_path)
+    row = conn.execute(
+        """SELECT tool_name, success, duration_ms, arguments_json, result_json
+           FROM tool_calls WHERE call_id = ? AND run_id = ?""",
+        (call_id, run_id),
+    ).fetchone()
+    return dict(row) if row else None

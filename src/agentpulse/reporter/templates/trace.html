@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+{% block title %}Trace {{ run_id[:8] }} — AgentPulse{% endblock %}
+
+{% block content %}
+<style>
+  .trace-wrap { display:flex; gap:0; height:calc(100vh - 58px); background:#fff; overflow:hidden; }
+  /* ── left: span tree ── */
+  .trace-tree { width:340px; flex-shrink:0; border-right:1px solid #e9ecf3;
+                overflow-y:auto; padding:10px 0; background:#fafbfd; }
+  .tt-head { padding:10px 14px 12px; border-bottom:1px solid #eef0f6; margin-bottom:6px;
+             display:flex; align-items:center; gap:10px; }
+  .tt-back { display:inline-flex; align-items:center; justify-content:center;
+             width:28px; height:28px; border:1px solid #dfe3ec; border-radius:8px;
+             background:#fff; color:#3b4252; text-decoration:none; flex-shrink:0; }
+  .tt-back svg { width:14px; height:14px; stroke:currentColor; fill:none;
+                 stroke-width:2; stroke-linecap:round; stroke-linejoin:round; display:block; }
+  .tt-back:hover { background:#eef1f8; color:#3949ab; }
+  .tt-id  { font-weight:700; font-size:.92rem; color:#1f2430; }
+  .tt-sub { font-size:.7rem; color:#8a90a0; }
+  .tnode { padding:6px 14px; cursor:pointer; display:flex; align-items:center; gap:8px;
+           font-size:.83rem; border-left:3px solid transparent; }
+  .tnode:hover  { background:#f0f2f8; }
+  .tnode.active { background:#e9edfb; border-left-color:#3949ab; }
+  .tnode .nm { font-weight:600; color:#1f2430; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tnode .meta { margin-left:auto; font-size:.7rem; color:#8a90a0; white-space:nowrap;
+                 font-variant-numeric:tabular-nums; }
+  .tnode.child { padding-left:34px; font-size:.78rem; }
+  .tnode.child .nm { font-weight:500; color:#3b4252; }
+  .tnode .caret { width:12px; color:#8a90a0; font-size:.65rem; flex-shrink:0;
+                  transition:transform .12s; }
+  .tnode .caret.open { transform:rotate(90deg); }
+  .tdot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .tdot.llm  { background:#3949ab; }
+  .tdot.tool { background:#a86400; }
+  .tdot.err  { background:#c22f2f; }
+  .branch-tag { font-size:.62rem; background:#eef1f8; color:#5b6478;
+                border-radius:3px; padding:0 5px; }
+  /* ── right: detail panel ── */
+  .trace-detail { flex:1; overflow-y:auto; padding:18px 24px; min-width:0; }
+  .td-empty { color:#8a90a0; font-size:.85rem; margin-top:40px; text-align:center; }
+  .td-chips { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; align-items:center; }
+  .td-chip  { background:#f2f4f9; border:1px solid #e3e6ee; border-radius:6px;
+              padding:2px 9px; font-size:.72rem; color:#3b4252;
+              font-variant-numeric:tabular-nums; }
+  .td-title { font-weight:700; font-size:1rem; margin-bottom:10px; display:flex;
+              align-items:center; gap:10px; }
+  .td-toggle { margin-left:auto; display:flex; gap:0; border:1px solid #dfe3ec;
+               border-radius:6px; overflow:hidden; }
+  .td-toggle button { border:none; background:#fff; font-size:.72rem; padding:3px 12px;
+                      cursor:pointer; color:#5b6478; }
+  .td-toggle button.on { background:#3949ab; color:#fff; }
+  .msg { border:1px solid #e9ecf3; border-radius:8px; margin-bottom:10px; overflow:hidden; }
+  .msg-role { font-size:.68rem; text-transform:uppercase; letter-spacing:.6px; font-weight:700;
+              padding:6px 12px; background:#f7f8fb; color:#5b6478;
+              display:flex; align-items:center; }
+  .msg-role.assistant { color:#3949ab; }
+  .msg-role.system    { color:#1e7d4a; }
+  .msg-role .copy { margin-left:auto; cursor:pointer; font-size:.7rem; font-weight:500;
+                    color:#8a90a0; text-transform:none; letter-spacing:0; }
+  .msg-role .copy:hover { color:#3949ab; }
+  .msg-body { padding:10px 12px; font-size:.8rem; white-space:pre-wrap;
+              word-break:break-word; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+              max-height:420px; overflow-y:auto; color:#24292f; }
+  .blk-tag { display:inline-block; font-size:.65rem; background:#eef1f8; color:#4653b8;
+             border-radius:3px; padding:0 6px; margin:4px 0 2px; font-family:system-ui; }
+  .raw-json { font-size:.75rem; }
+</style>
+
+<div class="trace-wrap">
+  <div class="trace-tree" id="tree">
+    <div class="tt-head">
+      <a href="/run/{{ run_id[:8] }}" class="tt-back" title="Back to run"><svg viewBox="0 0 24 24"><polyline points="14 6 8 12 14 18"/></svg></a>
+      <div>
+        <div class="tt-id">Run {{ run_id[:8] }}</div>
+        <div class="tt-sub">{{ task_type }} · {{ timestamp|et('%Y-%m-%d %H:%M') }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="trace-detail" id="detail">
+    <div class="td-empty">Select an agent turn, LLM call, or tool call to inspect it.</div>
+  </div>
+</div>
+
+<script>
+const RUN_ID = {{ run_id|tojson }};
+const TREE = {{ tree_json|safe }};
+const treeEl = document.getElementById('tree');
+const detailEl = document.getElementById('detail');
+let activeEl = null, rawMode = false, currentNode = null, cache = {};
+
+const fmtTok = (a, b) => `${a.toLocaleString()} → ${b.toLocaleString()}`;
+const fmtMs  = ms => ms >= 1000 ? (ms/1000).toFixed(2) + 's' : ms + 'ms';
+const esc = t => { const d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; };
+
+// ── build the tree ──────────────────────────────────────────────────────────
+TREE.forEach((span, si) => {
+  const row = document.createElement('div');
+  row.className = 'tnode';
+  row.innerHTML = `<span class="caret ${span.children.length ? 'open' : ''}">${span.children.length ? '▶' : ''}</span>` +
+    `<span class="nm">${esc(span.agent)}</span>` +
+    (span.branch ? `<span class="branch-tag">${esc(span.branch)}</span>` : '') +
+    (span.status !== 'OK' ? '<span class="tdot err"></span>' : '') +
+    `<span class="meta">${fmtMs(span.ms)} · ${fmtTok(span.in, span.out)}</span>`;
+  treeEl.appendChild(row);
+
+  const kids = [];
+  span.children.forEach(ch => {
+    const c = document.createElement('div');
+    c.className = 'tnode child';
+    if (ch.kind === 'llm') {
+      c.innerHTML = `<span class="tdot llm"></span><span class="nm">${esc(ch.label)}</span>` +
+        `<span class="meta">${fmtMs(ch.ms)} · ${fmtTok(ch.in, ch.out)}</span>`;
+    } else {
+      c.innerHTML = `<span class="tdot ${ch.ok ? 'tool' : 'err'}"></span><span class="nm">🔧 ${esc(ch.label)}</span>` +
+        `<span class="meta">${fmtMs(ch.ms)}${ch.ok ? '' : ' · failed'}</span>`;
+    }
+    c.onclick = () => select(c, ch, span);
+    treeEl.appendChild(c);
+    kids.push(c);
+  });
+
+  row.onclick = (e) => {
+    if (e.target.classList.contains('caret') && kids.length) {
+      const open = e.target.classList.toggle('open');
+      kids.forEach(k => k.style.display = open ? '' : 'none');
+      return;
+    }
+    select(row, span, span);
+  };
+});
+
+function select(el, node, span) {
+  if (activeEl) activeEl.classList.remove('active');
+  activeEl = el; el.classList.add('active');
+  currentNode = { node, span };
+  render();
+}
+
+async function fetchNode(node) {
+  const key = node.kind + ':' + node.id;
+  if (cache[key]) return cache[key];
+  const path = node.kind === 'span' ? `span/${node.id}` : `${node.kind}/${node.id}`;
+  const r = await fetch(`/api/trace/${RUN_ID}/${path}`);
+  cache[key] = await r.json();
+  return cache[key];
+}
+
+// ── renderers ───────────────────────────────────────────────────────────────
+function chips(list) {
+  return `<div class="td-chips">` + list.filter(Boolean).map(c => `<span class="td-chip">${c}</span>`).join('') + `</div>`;
+}
+function copyBtn(text) {
+  const id = 'c' + Math.random().toString(36).slice(2);
+  window['_' + id] = text;
+  return `<span class="copy" onclick="navigator.clipboard.writeText(window['_${id}']); this.textContent='copied'; setTimeout(()=>this.textContent='copy',900)">copy</span>`;
+}
+function msgBox(role, text, cls) {
+  return `<div class="msg"><div class="msg-role ${cls || role}">${esc(role)} ${copyBtn(text)}</div>` +
+         `<div class="msg-body">${esc(text)}</div></div>`;
+}
+function contentToText(content) {
+  if (content == null) return '';
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return JSON.stringify(content, null, 2);
+  return content.map(b => {
+    if (b && b.type === 'text') return b.text || '';
+    if (b && b.type === 'tool_use') return `[tool_use: ${b.name}]\n` + JSON.stringify(b.input, null, 2);
+    if (b && b.type === 'tool_result') return `[tool_result${b.is_error ? ' · error' : ''}]\n` + contentToText(b.content);
+    if (b && b.type === 'thinking') return `[thinking]\n` + (b.thinking || '');
+    return JSON.stringify(b, null, 2);
+  }).join('\n\n');
+}
+function header(title, meta) {
+  return `<div class="td-title">${esc(title)}` +
+    `<div class="td-toggle"><button class="${rawMode ? '' : 'on'}" onclick="rawMode=false;render()">Formatted</button>` +
+    `<button class="${rawMode ? 'on' : ''}" onclick="rawMode=true;render()">JSON</button></div></div>` + chips(meta);
+}
+
+async function render() {
+  if (!currentNode) return;
+  const { node, span } = currentNode;
+  detailEl.innerHTML = '<div class="td-empty">Loading…</div>';
+  const data = await fetchNode(node);
+  let html = '';
+
+  if (node.kind === 'llm') {
+    const req = data.request || {}, resp = data.response || {};
+    html += header(span.agent + ' · LLM call', [
+      data.model, fmtMs(data.duration_ms), fmtTok(data.input_tokens || 0, data.output_tokens || 0) + ' tokens',
+      req.max_tokens != null ? 'max_tokens ' + req.max_tokens : null,
+      req.temperature != null ? 'temp ' + req.temperature : null,
+      resp.stop_reason ? 'stop: ' + resp.stop_reason : null,
+    ]);
+    if (rawMode) {
+      html += msgBox('request', JSON.stringify(req, null, 2), 'system');
+      html += msgBox('response', JSON.stringify(resp, null, 2), 'assistant');
+    } else {
+      if (req.system) html += msgBox('system', contentToText(req.system), 'system');
+      (req.messages || []).forEach(m => html += msgBox(m.role || '?', contentToText(m.content), m.role));
+      html += msgBox('assistant (response)', contentToText(resp.content), 'assistant');
+      if (Array.isArray(req.tools) && req.tools.length) {
+        html += `<div class="blk-tag">tools available: ${req.tools.map(t => esc(t.name || (t.function || {}).name || '?')).join(', ')}</div>`;
+      }
+    }
+  } else if (node.kind === 'tool') {
+    html += header(span.agent + ' · 🔧 ' + (data.tool_name || node.label), [
+      fmtMs(data.duration_ms), data.success ? 'ok' : 'failed',
+    ]);
+    if (rawMode) {
+      html += msgBox('raw', JSON.stringify(data, null, 2), 'system');
+    } else {
+      html += msgBox('arguments', typeof data.arguments === 'string' ? data.arguments : JSON.stringify(data.arguments, null, 2), 'system');
+      html += msgBox('result', typeof data.result === 'string' ? data.result : JSON.stringify(data.result, null, 2), 'assistant');
+    }
+  } else {
+    html += header(data.agent_name + ' · turn output', [
+      fmtMs(data.duration_ms || 0), fmtTok(data.input_tokens || 0, data.output_tokens || 0) + ' tokens',
+      data.model, data.status !== 'OK' ? 'status: ' + data.status : null,
+      data.status_value ? esc(data.status_value) : null,
+    ]);
+    if (rawMode) {
+      html += msgBox('raw', JSON.stringify(data, null, 2), 'system');
+    } else {
+      html += data.output_text
+        ? msgBox('final output (handoff)', data.output_text, 'assistant')
+        : '<div class="td-empty">No output captured for this turn.</div>';
+    }
+  }
+  detailEl.innerHTML = html;
+}
+
+// Auto-select the first agent turn so the panel is never empty.
+const first = treeEl.querySelector('.tnode:not(.child)');
+if (first && TREE.length) select(first, TREE[0], TREE[0]);
+</script>
+{% endblock %}

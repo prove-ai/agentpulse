@@ -38,11 +38,96 @@
 
 <!-- Task -->
 <div class="card mb-3">
-  <div class="card-body py-2 px-4">
-    <div class="text-muted" style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.5px;">Task</div>
-    <div style="font-size:1rem;font-weight:500;">{{ task_text }}</div>
-    <div class="text-muted small">{{ task_type }} · prompt v{{ prompt_version }} · {{ timestamp|et('%Y-%m-%d %H:%M:%S') }} {{ tz_label }}</div>
+  <div class="card-body py-2 px-4 d-flex align-items-center gap-3">
+    <div style="min-width:0;">
+      <div class="text-muted" style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.5px;">Run</div>
+      <div style="font-size:1rem;font-weight:600;">{{ run_id[:8] }}</div>
+      <div class="text-muted small">{{ task_type }} · prompt v{{ prompt_version }} · {{ timestamp|et('%Y-%m-%d %H:%M:%S') }} {{ tz_label }}</div>
+    </div>
+    <a href="/run/{{ run_id[:8] }}/trace" class="btn btn-primary ms-auto flex-shrink-0 px-4"
+       style="font-weight:600;">View Trace ▸</a>
   </div>
+</div>
+
+<!-- ═══ Run Health (first glance) ═══ -->
+<div class="row g-4 mb-3">
+  <div class="{{ 'col-lg-7' if metrics.unique_tools else 'col-12' }}">
+    <div class="card h-100">
+      <div class="card-header card-header-soft py-2 d-flex align-items-center">
+        Run Health
+        <span class="ms-auto d-inline-flex align-items-center gap-1" style="font-size:.76rem; font-weight:600; color:{{ '#1e7d4a' if clean else '#c22f2f' }};">
+          <span style="width:8px;height:8px;border-radius:50%;background:{{ '#28a745' if clean else '#dc3545' }};display:inline-block;"></span>
+          {{ termination_short }}
+        </span>
+      </div>
+      <div class="card-body py-3">
+        <style>
+          .rh-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:14px 22px; }
+          .rh-item .k { font-size:.68rem; text-transform:uppercase; letter-spacing:.5px; color:#7a8194; margin-bottom:2px; }
+          .rh-item .v { font-size:.92rem; font-weight:600; color:#1f2430; }
+          .rh-item .v .sub { font-size:.74rem; font-weight:400; color:#8a90a0; }
+        </style>
+        <div class="rh-grid">
+          <div class="rh-item">
+            <div class="k">Error spans</div>
+            <div class="v {{ 'text-danger' if metrics.error_span_count else '' }}">{{ metrics.error_span_count }}</div>
+          </div>
+          <div class="rh-item">
+            <div class="k">Tool failures</div>
+            <div class="v {{ 'text-danger' if metrics.tool_failure_count else 'text-success' }}">{{ metrics.tool_failure_count }}</div>
+          </div>
+          <div class="rh-item">
+            <div class="k">Repeated agents</div>
+            <div class="v">
+              {% if metrics.flagged_loops %}
+                <span class="text-danger">{% for p in metrics.reentry_patterns %}{% if p.flagged %}{{ p.pattern }} {% endif %}{% endfor %}</span>
+                <span class="sub">unexpected</span>
+              {% elif metrics.loop_reentry_count %}
+                {{ metrics.loop_reentry_count }} <span class="sub">requested</span>
+              {% else %}none{% endif %}
+            </div>
+          </div>
+          <div class="rh-item">
+            <div class="k">Busiest agent</div>
+            <div class="v">
+              {% if metrics.per_agent_token_share %}
+                {% set busiest = metrics.per_agent_token_share|dictsort(by='value')|last %}
+                {{ busiest[0] }} <span class="sub">{{ "%.0f"|format(busiest[1]) }}% of tokens</span>
+              {% else %}—{% endif %}
+            </div>
+          </div>
+          <div class="rh-item">
+            <div class="k">Parallelism</div>
+            <div class="v">{{ "%.2f"|format(metrics.parallelism_factor) }}×
+              <span class="sub">{% if metrics.parallelism_factor >= 1.5 %}parallel{% elif metrics.parallelism_factor > 1.1 %}some overlap{% else %}sequential{% endif %}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% if metrics.unique_tools %}
+  <div class="col-lg-5">
+    <div class="card h-100">
+      <div class="card-header card-header-soft py-2">Tools</div>
+      <div class="card-body p-0">
+        <table class="table table-sm ct-aligned mb-0">
+          <thead class="table-light"><tr><th>Tool</th><th>By</th><th class="text-end">Calls</th><th class="text-end">Fail</th></tr></thead>
+          <tbody>
+          {% for tool, freq in metrics.tool_frequency.items() %}
+          <tr>
+            <td><code style="font-size:.8rem;">{{ tool }}</code></td>
+            <td>{% for agent, dist in metrics.tool_distribution_per_agent.items() %}{% if tool in dist %}<span class="chip" style="font-size:.7rem;">{{ agent }}</span>{% endif %}{% endfor %}</td>
+            <td class="text-end">{{ freq }}</td>
+            <td class="text-end {{ 'text-danger fw-bold' if metrics.tool_failure_count else 'text-success' }}">{{ metrics.tool_failure_count }}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 </div>
 
 <!-- ═══ INSIGHTS (the headline — what changed & does it matter) ═══ -->
@@ -196,7 +281,7 @@
       <span><span style="display:inline-block;width:11px;height:11px;background:#eef1f8;border:1px solid #3949ab;border-radius:2px;"></span> normal</span>
       <span><span style="display:inline-block;width:11px;height:11px;background:#e3f7ea;border:2px solid #28a745;border-radius:2px;"></span> finished (APPROVED)</span>
       <span><span style="display:inline-block;width:11px;height:11px;background:#fdecec;border:2px solid #dc3545;border-radius:2px;"></span> did not finish cleanly</span>
-      <span><span style="display:inline-block;width:11px;height:11px;background:#ffffff;border:2px solid #dc3545;border-radius:2px;"></span> drifted vs baseline</span>
+      <span><span style="display:inline-block;width:11px;height:11px;background:#ffffff;border:1.5px solid #d9534f;border-radius:2px;"></span> drifted vs baseline</span>
       <span><span style="display:inline-block;width:11px;height:11px;background:#fdf3e2;border:1px solid #fd7e14;border-radius:2px;"></span> unexpected re-entry</span>
       <span style="border-top:2px dashed #b0b6c3;width:22px;display:inline-block;margin-bottom:3px;"></span> requested loop-back
     </div>
@@ -214,9 +299,7 @@
   </div>
   <div class="card-body" style="background:#f7f8fc;">
     {% for g in parallel_groups %}
-    {# Border tier mirrors the efficiency number's colour (Bootstrap text-success/warning/danger) #}
-    {% set eff_color = '#28a745' if g.efficiency >= 0.85 else ('#ffc107' if g.efficiency >= 0.6 else '#dc3545') %}
-    <div class="card mb-3" style="border-left:5px solid {{ eff_color }};">
+    <div class="card mb-3">
       <div class="card-body">
         <div class="d-flex justify-content-between align-items-start mb-2">
           <div>
@@ -323,257 +406,6 @@
   </div>
 </div>
 {% endif %}
-
-<!-- ═══ Bottom: drift + health ═══ -->
-<div class="row g-4">
-  <div class="col-lg-7">
-
-    <!-- Anomalies — this run vs average of prior runs (NOT drift) -->
-    {% if has_baseline %}
-    <div class="card mb-3">
-      <div class="card-header py-2 {{ 'card-header-soft' if report.has_anomaly else 'card-header-soft' }}">
-        Anomalies vs Average <span class="small fw-normal">(single-run variance, not drift)</span>
-        <span class="float-end small">vs avg of {{ report.baseline_run_count }} prior run(s)</span>
-      </div>
-      <div class="card-body p-0">
-        <div class="pt-2 text-muted small" style="padding-left:20px;padding-right:20px;">
-          One run differing from the average is <strong>variance</strong>, not drift. A true drift
-          would require many runs shifting in the same direction (see Version Drift below).
-        </div>
-        <table class="table table-sm ct ct-aligned mb-0">
-          <thead class="table-light">
-            <tr><th style="width:24%;">What we check</th><th style="width:32%;">This run</th><th style="width:28%;">Normal range</th><th class="text-end" style="width:16%;">Verdict</th></tr>
-          </thead>
-          <tbody>
-          {% for v in report.verdicts %}
-          <tr>
-            <td>{{ v.name|replace('_', ' ') }}</td>
-            <td class="fw-semibold">
-              {% if v.name == 'agent_sequence' %}
-                {% set seq = v.current %}
-                {% if seq|length > 2 %}
-                  <span data-tip="{{ seq|join(' | ') }}">{{ seq[0] }} → … → {{ seq[-1] }}</span>
-                {% else %}
-                  {{ seq|join(' → ') }}
-                {% endif %}
-              {% else %}{{ v.current }}{% endif %}
-            </td>
-            <td class="text-muted small">{{ v.note }}</td>
-            <td class="text-end">{% if v.drifted %}<span class="pill pill-warn">{{ v.label|replace('_', ' ') }}</span>{% else %}<span class="pill pill-ok">within range</span>{% endif %}</td>
-          </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    {% if report.per_agent_verdicts %}
-    <div class="card mb-3">
-      <div class="card-header card-header-soft py-2">Per-Agent Anomalies <span class="small fw-normal">· this run vs the agent's usual behaviour</span></div>
-      <div class="card-body p-0">
-        {% for agent, verdicts in report.per_agent_verdicts.items() %}
-          {% set drifted = verdicts|selectattr('drifted')|list %}
-          <div class="px-3 pt-2 pb-1 {{ 'border-start border-warning border-3' if drifted else '' }}">
-            <div class="mb-1">
-              <span class="chip">{{ agent }}</span>
-              {% if drifted %}{% for v in drifted %}<span class="ms-1 pill pill-warn">{{ v.label|replace('_', ' ') }}</span>{% endfor %}
-              {% else %}<span class="ms-2 pill pill-ok">normal</span>{% endif %}
-            </div>
-            <table class="table table-sm ct mb-1">
-              <thead><tr><th class="text-muted small">signal</th><th class="text-end text-muted small">this run</th><th class="text-end text-muted small">avg of prior</th><th class="text-end text-muted small">Δ%</th><th class="text-muted small">verdict</th></tr></thead>
-              <tbody>
-              {% for v in verdicts %}
-              <tr>
-                <td style="width:150px;">{{ v.signal|replace('_', ' ') }}</td>
-                <td class="text-end">{{ v.current }}</td>
-                <td class="text-end text-muted">{{ v.baseline }}</td>
-                <td class="text-end">{{ "%+.1f"|format(v.delta_pct) }}%</td>
-                <td>{% if v.drifted %}<span class="pill pill-warn">outside range</span>{% else %}<span class="pill pill-ok">in range</span>{% endif %}</td>
-              </tr>
-              {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        {% endfor %}
-      </div>
-    </div>
-    {% endif %}
-    {% else %}
-    <div class="card mb-3">
-      <div class="card-header card-header-soft py-2">Anomalies vs Average</div>
-      <div class="card-body text-muted small">First run for this task type — anomaly checks need at least one prior run for comparison.</div>
-    </div>
-    {% endif %}
-
-    <!-- Version comparison (cohort vs cohort) -->
-    {% if vreport and vreport.available %}
-    <div class="card mb-3">
-      <div class="card-header py-2 card-header-soft d-flex justify-content-between">
-        <span>Version Drift · v{{ vreport.target_version }} vs v{{ vreport.base_version }}</span>
-        <span class="small">
-          {% if vreport.mode == 'paired' %}🎯 paired on {{ vreport.paired_questions }} question(s){% else %}~ task-type avg{% endif %}
-          ·
-          {% if vreport.confidence == 'confident' %}confident{% else %}low confidence{% endif %}
-        </span>
-      </div>
-      <div class="card-body p-0">
-        <div class="pt-2 text-muted small" style="padding-left:20px;padding-right:20px;">
-          Comparing {{ vreport.target_runs }} run(s) of v{{ vreport.target_version }}
-          against {{ vreport.base_runs }} run(s) of v{{ vreport.base_version }}.
-          {% if vreport.mode == 'approximate' %}
-            <em>Absolute tokens/cost are hidden — questions differ, so only normalized signals are compared.</em>
-          {% endif %}
-        </div>
-        <!-- Overall -->
-        <table class="table table-sm ct ct-aligned mb-0">
-          <thead class="table-light"><tr><th>Overall</th><th class="text-end">v{{ vreport.base_version }}</th><th class="text-end">v{{ vreport.target_version }}</th><th class="text-end">Δ</th><th class="text-end">Consistency</th><th>Verdict</th></tr></thead>
-          <tbody>
-          {% for v in vreport.overall %}
-          <tr>
-            <td>{{ v.signal }}</td>
-            <td class="text-end text-muted">{% if v.signal == 'typical route' %}{{ v.base|join(' → ') }}{% else %}{{ v.base }}{% endif %}</td>
-            <td class="text-end">{% if v.signal == 'typical route' %}{{ v.target|join(' → ') }}{% else %}{{ v.target }}{% endif %}</td>
-            <td class="text-end">{% if v.signal != 'typical route' %}{{ "%+.1f"|format(v.delta_pct) }}{% if v.signal not in ['avg turns'] %}%{% endif %}{% else %}—{% endif %}</td>
-            <td class="text-end small {{ 'text-muted' if not v.drifted else '' }}">{{ "%.0f"|format(v.consistency*100) }}%</td>
-            <td>
-              {% if v.status == 'drift' %}<span class="pill pill-drift">Drift</span>
-              {% elif v.status == 'potential' %}<span class="pill pill-potential">Potential</span>
-              {% else %}<span class="pill pill-ok">stable</span>{% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Per-agent version drift -->
-    <div class="card">
-      <div class="card-header card-header-soft py-2">Per-Agent · v{{ vreport.target_version }} vs v{{ vreport.base_version }}</div>
-      <div class="card-body p-0">
-        {% for agent, verdicts in vreport.per_agent.items() %}
-          {% set confirmed = verdicts|selectattr('status','equalto','drift')|list %}
-          {% set potential = verdicts|selectattr('status','equalto','potential')|list %}
-          {% set border_cls = 'border-start border-danger border-3' if confirmed else ('border-start border-warning border-3' if potential else '') %}
-          <div class="px-3 pt-2 pb-1 {{ border_cls }}">
-            <div class="mb-1">
-              <span class="chip">{{ agent }}</span>
-              {% for v in confirmed %}<span class="ms-1 pill pill-drift">Drift: {{ v.label }}</span>{% endfor %}
-              {% for v in potential %}<span class="ms-1 pill pill-potential">Potential: {{ v.label }}</span>{% endfor %}
-              {% if not confirmed and not potential %}<span class="ms-2 pill pill-ok">no change</span>{% endif %}
-            </div>
-            <table class="table table-sm ct mb-1">
-              <tbody>
-              {% for v in verdicts %}
-              <tr>
-                <td style="width:150px;">{{ v.signal }}</td>
-                <td class="text-end text-muted">v{{ vreport.base_version }}: {{ v.base }}</td>
-                <td class="text-end">v{{ vreport.target_version }}: {{ v.target }}</td>
-                <td class="text-end">{{ "%+.1f"|format(v.delta_pct) }}%</td>
-                <td class="text-end small {{ 'text-muted' if not v.drifted else '' }}">{{ "%.0f"|format(v.consistency*100) }}%</td>
-                <td>
-                  {% if v.status == 'drift' %}<span class="pill pill-drift">Drift</span>
-                  {% elif v.status == 'potential' %}<span class="pill pill-potential">Potential</span>
-                  {% else %}<span class="pill pill-ok">stable</span>{% endif %}
-                </td>
-              </tr>
-              {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        {% endfor %}
-      </div>
-    </div>
-    {% else %}
-    <div class="card">
-      <div class="card-header card-header-soft py-2">Version Drift</div>
-      <div class="card-body text-muted small">
-        {% if not vreport %}
-          This run is on the <strong>baseline version</strong> (v{{ base_version }}). Version drift
-          appears on later prompt versions, comparing the whole version against this baseline.
-        {% else %}
-          Not enough data yet. {{ vreport.note }}
-        {% endif %}
-      </div>
-    </div>
-    {% endif %}
-
-  </div>
-
-  <!-- Health -->
-  <div class="col-lg-5">
-    {% if metrics.unique_tools %}
-    <div class="card mb-3">
-      <div class="card-header card-header-soft py-2">Tools</div>
-      <div class="card-body p-0">
-        <table class="table table-sm ct-aligned mb-0">
-          <thead class="table-light"><tr><th>Tool</th><th>By</th><th class="text-end">Calls</th><th class="text-end">Fail</th></tr></thead>
-          <tbody>
-          {% for tool, freq in metrics.tool_frequency.items() %}
-          <tr>
-            <td><code style="font-size:.8rem;">{{ tool }}</code></td>
-            <td>{% for agent, dist in metrics.tool_distribution_per_agent.items() %}{% if tool in dist %}<span class="chip" style="font-size:.7rem;">{{ agent }}</span>{% endif %}{% endfor %}</td>
-            <td class="text-end">{{ freq }}</td>
-            <td class="text-end {{ 'text-danger fw-bold' if metrics.tool_failure_count else 'text-success' }}">{{ metrics.tool_failure_count }}</td>
-          </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-    {% endif %}
-
-    <div class="card">
-      <div class="card-header card-header-soft py-2">Run Health</div>
-      <div class="card-body p-0">
-        <table class="table table-sm ct ct-aligned mb-0">
-          <tr><td>Outcome</td><td class="fw-bold {{ 'text-success' if clean else 'text-danger' }}">{{ termination_short }}</td></tr>
-          <tr><td>Error spans</td><td>{{ metrics.error_span_count }}</td></tr>
-          <tr><td>Tool failures</td><td class="{{ 'text-danger fw-bold' if metrics.tool_failure_count else 'text-success' }}">{{ metrics.tool_failure_count }}</td></tr>
-          <tr>
-            <td>Repeated agents</td>
-            <td class="{{ 'text-danger fw-bold' if metrics.flagged_loops else '' }}">
-              {% if metrics.flagged_loops %}
-                {% for p in metrics.reentry_patterns %}{% if p.flagged %}<span class="drift-tag">{{ p.pattern }}</span> {% endif %}{% endfor %}
-                <span class="text-muted small">(unexpected re-entry)</span>
-              {% elif metrics.loop_reentry_count %}
-                <span class="text-muted small">{{ metrics.loop_reentry_count }} (requested)</span>
-              {% else %}<span class="text-success">none</span>{% endif %}
-            </td>
-          </tr>
-          <tr><td>Busiest agent</td><td>{{ "%.0f"|format(metrics.token_concentration*100) }}% of all tokens</td></tr>
-          <tr>
-            <td>Wall-clock</td>
-            <td>{{ "%.1f"|format(metrics.total_wall_clock_ms/1000) }}s · sum of agent time {{ "%.1f"|format(metrics.sum_of_span_durations/1000) }}s</td>
-          </tr>
-          <tr>
-            <td>Parallelism factor</td>
-            <td>
-              <span class="fw-bold">{{ "%.2f"|format(metrics.parallelism_factor) }}×</span>
-              {% if metrics.parallelism_factor >= 1.5 %}
-                <span class="text-success small">— agents ran in parallel</span>
-              {% elif metrics.parallelism_factor > 1.1 %}
-                <span class="text-warning small">— some overlap</span>
-              {% else %}
-                <span class="text-muted small">— sequential</span>
-              {% endif %}
-            </td>
-          </tr>
-          <tr>
-            <td>Parallel groups (DAG)</td>
-            <td>
-              {% if parallel_groups %}
-                <span class="fw-bold text-success">{{ parallel_groups|length }}</span>
-              {% else %}
-                <span class="text-muted">none</span>
-              {% endif %}
-            </td>
-          </tr>
-        </table>
-      </div>
-    </div>
-  </div>
-</div>
 
 {% endblock %}
 
