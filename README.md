@@ -36,7 +36,7 @@ flowchart LR
 
 In words:
 
-1. You launch your app through `agentpulse run` — no code changes. It patches the OpenAI and Anthropic SDKs inside your process and hooks AutoGen and LangChain when they are present. With those frameworks, every LLM call, tool call, and handoff is captured automatically; custom orchestrators are not officially supported (see [Framework support](#framework-support)).
+1. You launch your app with `agentpulse run`. It patches the OpenAI and Anthropic SDKs inside your process and hooks AutoGen and LangChain when they are present. With those frameworks, every LLM call, tool call, and handoff is captured automatically; custom orchestrators are not officially supported (see [Framework support](#framework-support)).
 2. Captured events are written through `storage/` into a plain SQLite file per project, `~/.agentpulse/db/<project>.db`. No server, no agent daemon.
 3. The `analysis/` engine reads those runs and computes metrics, anomaly reports, drift findings, and causal chains.
 4. Three surfaces present the same findings: the Flask dashboard, the `today-drift` CLI, and the MCP server that Claude Code or Claude Desktop connects to.
@@ -84,17 +84,17 @@ git clone https://github.com/prove-ai/agentpulse.git
 AGENTPULSE_HOME=./agentpulse agentpulse dashboard
 ```
 
-Open <http://localhost:5001> — the Drift Investigation view above is the first thing you can reproduce.
+Open <http://localhost:5001>. The Drift Investigation view above is the first thing you can reproduce.
 
 ### Step 2: capture your own system
 
-No code changes — launch your app through `agentpulse run` instead of `python`:
+Run your app with this command:
 
 ```bash
 agentpulse run python main.py
 ```
 
-If your system runs on a supported framework (see the table below), that is the whole integration. Every LLM call, agent turn, tool call, and handoff is captured into `~/.agentpulse/db/runs.db`. Then run `agentpulse dashboard` and your project appears in the sidebar picker. Your data stays on your machine — it's plain SQLite in your home directory.
+If your system runs on a supported framework (see the table below), that is the whole integration. Every LLM call, agent turn, tool call, and handoff is captured into `~/.agentpulse/db/runs.db`. Then run `agentpulse dashboard` and your project appears in the sidebar picker. Your data stays on your machine, as plain SQLite files in your home directory.
 
 To monitor several systems side by side, give each its own database:
 
@@ -112,7 +112,7 @@ AGENTPULSE_DB=my-system agentpulse run python main.py
 | LangChain, LangGraph, and frameworks built on LangChain callbacks (e.g. CrewAI) | `agentpulse run`, nothing else | Full capture: each chain/node reports its name through the callback system; tokens come from the SDK patches |
 | Plain OpenAI/Anthropic SDK with your own orchestration (e.g. `asyncio.gather`) | Not officially supported | — |
 
-The reason for the difference: AutoGen and LangChain expose agent boundaries through their event and callback systems, so AgentPulse can attribute every call to the right agent automatically. A hand-rolled orchestrator has no such signal, so automatic capture is not possible and custom pipelines are not officially supported. (If you really need one, the session primitives in [`src/agentpulse/sdk/session.py`](src/agentpulse/sdk/session.py) are what the adapters in [`src/agentpulse/sdk/patches/`](src/agentpulse/sdk/patches) drive — but you're off the supported path.)
+The reason for the difference: AutoGen and LangChain expose agent boundaries through their event and callback systems, so AgentPulse can attribute every call to the right agent automatically. A hand-rolled orchestrator has no such signal, so automatic capture is not possible and custom pipelines are not officially supported. (If you really need one, the session primitives in [`src/agentpulse/sdk/session.py`](src/agentpulse/sdk/session.py) are what the adapters in [`src/agentpulse/sdk/patches/`](src/agentpulse/sdk/patches) drive, but you're off the supported path.)
 
 ### What gets captured
 
@@ -243,7 +243,7 @@ All AgentPulse data lives under one home directory, `~/.agentpulse` by default (
 
 Set `ANTHROPIC_API_KEY` in `~/.agentpulse/.env` (or your shell environment) to enable the AI "suggest next checks" feature (dashboard button, CLI `--next`, MCP `get_next_check_steps`). Everything else works without it; the MCP tool falls back to deterministic checks.
 
-Drift detection thresholds and handoff rules ship inside the package ([`src/agentpulse/config/drift_rules.yaml`](src/agentpulse/config/drift_rules.yaml)); to tune them, copy that file to `~/.agentpulse/config/drift_rules.yaml` and edit — it takes precedence, and the dashboard reloads it on every request, no restart needed.
+Drift detection thresholds and handoff rules ship inside the package ([`src/agentpulse/config/drift_rules.yaml`](src/agentpulse/config/drift_rules.yaml)); to tune them, copy that file to `~/.agentpulse/config/drift_rules.yaml` and edit. Your copy takes precedence, and the dashboard reloads it on every request, so no restart is needed.
 
 Per-run labels are set with environment variables when launching: `AGENTPULSE_DB` (project database name), `AGENTPULSE_TASK_TYPE` (groups like-with-like in drift reports), and `AGENTPULSE_PROMPT_VERSION` (bump when you change prompts). All are optional.
 
@@ -277,7 +277,7 @@ agentpulse/
 │   ├── analysis/             Metric engine: raw → derived → anomalies → trends → drift → DAG
 │   ├── reporter/             Flask dashboard + Jinja templates
 │   ├── config/               Default drift rules + prompt manifests (shipped in the package)
-│   ├── runner.py             `agentpulse run` — zero-code-change launcher
+│   ├── runner.py             the `agentpulse run` launcher
 │   ├── cli.py                The `agentpulse` command (run/report/dashboard/drift/mcp)
 │   ├── drift_cli.py          Drift findings as terminal cards
 │   ├── report.py             Per-run metrics report

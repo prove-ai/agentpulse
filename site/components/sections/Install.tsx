@@ -10,7 +10,7 @@ export default function Install() {
           </div>
           <pre>
             <span className="t-dim">$</span> pip install proveai-agentpulse{"\n\n"}
-            <span className="t-dim"># launch your app through agentpulse — no code changes</span>{"\n"}
+            <span className="t-dim"># run your app with this command</span>{"\n"}
             <span className="t-dim">$</span> agentpulse run python main.py{"\n\n"}
             <span className="t-dim"># then explore the captured runs</span>{"\n"}
             <span className="t-dim">$</span> agentpulse dashboard
@@ -18,12 +18,10 @@ export default function Install() {
         </div>
         <div className="install-side">
           <div className="num">Integration</div>
-          <h2>Zero code changes.</h2>
+          <h2>One command.</h2>
           <p className="sect-sub">
-            Launch your app through <code>agentpulse run</code> instead of{" "}
-            <code>python</code>. Every LLM call, agent turn, tool call, and
-            handoff is captured automatically — your agents&apos;
-            implementation stays untouched.
+            Run your app with <code>agentpulse run</code>. Every LLM call,
+            agent turn, tool call, and handoff is captured automatically.
           </p>
         </div>
         <div className="works-with">
