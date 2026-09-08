@@ -26,9 +26,9 @@ from pathlib import Path
 
 # Make the repo importable regardless of where this is run from.
 _ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_ROOT))
+sys.path.insert(0, str(_ROOT / "src"))
 
-from storage.sqlite_store import (resolve_db_path, get_connection, model_price,
+from agentpulse.storage.sqlite_store import (resolve_db_path, get_connection, model_price,
                                   record_prompt, set_active_db_path)
 
 

@@ -43,10 +43,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 _OBS_ROOT = Path(__file__).parent.parent
-if str(_OBS_ROOT) not in sys.path:
-    sys.path.insert(0, str(_OBS_ROOT))
+if str(_OBS_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(_OBS_ROOT / "src"))
 
-from storage.sqlite_store import get_connection, resolve_db_path
+from agentpulse.storage.sqlite_store import get_connection, resolve_db_path
 
 # Sampling/request parameters exported as gen_ai.request.<name>. Content-
 # bearing kwargs (messages) are handled separately; system/tools are JSON-

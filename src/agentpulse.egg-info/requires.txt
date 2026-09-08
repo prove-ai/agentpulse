@@ -1,0 +1,16 @@
+flask>=3.0
+pyyaml>=6.0
+rich>=13.0
+
+[ai]
+anthropic>=0.40
+
+[all]
+agentpulse[ai,mcp,otel]
+
+[mcp]
+mcp>=1.0
+
+[otel]
+opentelemetry-sdk>=1.24
+opentelemetry-api>=1.24

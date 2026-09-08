@@ -10,10 +10,10 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.join(ROOT, "src"))
 
-from analysis.drift_config import load_drift_config       # noqa: E402
-from analysis.drift_detect import classify_drift          # noqa: E402
+from agentpulse.analysis.drift_config import load_drift_config       # noqa: E402
+from agentpulse.analysis.drift_detect import classify_drift          # noqa: E402
 
 
 def _pts(vals):

@@ -12,10 +12,10 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.join(ROOT, "src"))
 
 # 1) Turn on capture BEFORE building/running the graph.
-from sdk.instrument import instrument            # noqa: E402
+from agentpulse.sdk.instrument import instrument            # noqa: E402
 instrument(task_type="smoke", prompt_version=1, db_name="lg_smoke")
 
 from typing import TypedDict                      # noqa: E402

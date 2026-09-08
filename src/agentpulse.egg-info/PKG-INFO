@@ -1,3 +1,46 @@
+Metadata-Version: 2.4
+Name: agentpulse
+Version: 0.1.0
+Summary: Observability and drift detection for multi-agent systems (AutoGen, LangChain/LangGraph)
+License: MIT License
+        
+        Copyright (c) 2026 Prove AI
+        
+        Permission is hereby granted, free of charge, to any person obtaining a copy
+        of this software and associated documentation files (the "Software"), to deal
+        in the Software without restriction, including without limitation the rights
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the Software is
+        furnished to do so, subject to the following conditions:
+        
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE.
+        
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: flask>=3.0
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: rich>=13.0
+Provides-Extra: ai
+Requires-Dist: anthropic>=0.40; extra == "ai"
+Provides-Extra: mcp
+Requires-Dist: mcp>=1.0; extra == "mcp"
+Provides-Extra: otel
+Requires-Dist: opentelemetry-sdk>=1.24; extra == "otel"
+Requires-Dist: opentelemetry-api>=1.24; extra == "otel"
+Provides-Extra: all
+Requires-Dist: agentpulse[ai,mcp,otel]; extra == "all"
+Dynamic: license-file
+
 # AgentPulse
 
 [![tests](https://github.com/prove-ai/agentpulse/actions/workflows/tests.yml/badge.svg)](https://github.com/prove-ai/agentpulse/actions/workflows/tests.yml)
