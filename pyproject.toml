@@ -18,7 +18,7 @@ dependencies = [
 [project.optional-dependencies]
 # AI triage ("Suggest next checks") in Drift Investigation
 ai = ["anthropic>=0.40"]
-# MCP server — exposes the drift engine to Claude Code / Desktop
+# MCP server: exposes the drift engine to Claude Code and Claude Desktop
 mcp = ["mcp>=1.0"]
 # OTel exporters (scripts/otel_export.py)
 otel = ["opentelemetry-sdk>=1.24", "opentelemetry-api>=1.24"]
