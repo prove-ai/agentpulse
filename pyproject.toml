@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "proveai-agentpulse"
 version = "0.2.0"
 description = "Observability and drift detection for multi-agent systems (AutoGen, LangChain/LangGraph)"
-readme = "README.md"
+readme = "PYPI.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = [
@@ -26,6 +26,11 @@ all = ["proveai-agentpulse[ai,mcp,otel]"]
 
 # NOTE: openai / anthropic SDKs are NOT dependencies. instrument() patches
 # whichever is already installed in the system being observed.
+
+[project.urls]
+Homepage = "https://prove-ai.github.io/agentpulse/"
+Repository = "https://github.com/prove-ai/agentpulse"
+Issues = "https://github.com/prove-ai/agentpulse/issues"
 
 [project.scripts]
 agentpulse = "agentpulse.cli:main"
