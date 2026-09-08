@@ -34,6 +34,37 @@ def env_file() -> Path:
     return home_dir() / ".env"
 
 
+def set_env_value(key: str, value: str, path: Path | None = None) -> None:
+    """Write KEY=VALUE into the home .env, replacing any existing line for KEY.
+
+    Creates the file (and the home directory) if needed. The file is chmod'd
+    to owner-only because it holds secrets like ANTHROPIC_API_KEY.
+    """
+    path = path or env_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = []
+    try:
+        lines = path.read_text().splitlines()
+    except OSError:
+        pass
+    lines = [l for l in lines if not l.strip().startswith(f"{key}=")]
+    lines.append(f"{key}={value}")
+    path.write_text("\n".join(lines) + "\n")
+    path.chmod(0o600)
+
+
+def unset_env_value(key: str, path: Path | None = None) -> None:
+    """Remove KEY from the home .env, if present."""
+    path = path or env_file()
+    try:
+        lines = path.read_text().splitlines()
+    except OSError:
+        return
+    kept = [l for l in lines if not l.strip().startswith(f"{key}=")]
+    if kept != lines:
+        path.write_text(("\n".join(kept) + "\n") if kept else "")
+
+
 def load_env_file(path: Path | None = None) -> None:
     """Load KEY=VALUE lines from the home .env into os.environ.
 

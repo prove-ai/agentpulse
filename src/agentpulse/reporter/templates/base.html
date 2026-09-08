@@ -140,9 +140,11 @@
       border-right: 1px solid #e6e8ef; padding: 18px 12px;
       transition: width 0.18s ease, padding 0.18s ease;
       overflow: hidden;
+      display: flex; flex-direction: column;
     }
+    .side-settings { margin-top: auto; padding-top: 10px; border-top: 1px solid #e6e8ef; }
     .sidebar.collapsed { width: 0; padding: 18px 0; border-right: none; }
-    .sidebar.collapsed .side-link, .sidebar.collapsed .side-section,
+    .sidebar.collapsed .side-link, .sidebar.collapsed .side-section, .sidebar.collapsed .side-settings,
     .sidebar.collapsed .proj-picker { display: none; }
     .side-section {
       font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.8px;
@@ -238,6 +240,14 @@
       Event Timeline
     </a>
     {% endif %}
+
+    <div class="side-settings">
+      <a href="/settings" title="Settings"
+         class="side-link {% if request.path == '/settings' %}active{% endif %}">
+        <span class="ico-svg"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.01a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.01a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/></svg></span>
+        Settings
+      </a>
+    </div>
   </aside>
 
   <main class="main-area">

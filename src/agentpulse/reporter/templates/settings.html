@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Settings — AgentPulse{% endblock %}
+
+{% block content %}
+<style>
+  .settings-wrap { max-width: 640px; margin: 24px auto; padding: 0 16px; }
+  .settings-card {
+    background: #fff; border: 1px solid #e6e8ef; border-radius: 10px;
+    padding: 22px 24px; margin-bottom: 16px;
+  }
+  .settings-card h5 { margin-bottom: 4px; }
+  .settings-sub { color: #6b7280; font-size: 0.85rem; margin-bottom: 16px; }
+  .key-row { display: flex; gap: 8px; }
+  .key-row input {
+    flex: 1; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85rem;
+  }
+  .key-state {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 0.85rem; margin-bottom: 12px;
+  }
+  .key-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .key-dot.on { background: #198754; }
+  .key-dot.off { background: #adb5bd; }
+  .settings-note { color: #6b7280; font-size: 0.78rem; margin-top: 12px; }
+  .flash-ok {
+    background: #e8f5ee; border: 1px solid #b6dfc9; color: #14532d;
+    border-radius: 8px; padding: 10px 14px; font-size: 0.85rem; margin-bottom: 14px;
+  }
+</style>
+
+<div class="settings-wrap">
+  <h4 class="mb-3">Settings</h4>
+
+  {% if saved == 'set' %}<div class="flash-ok">API key saved. AI suggestions are now enabled.</div>{% endif %}
+  {% if saved == 'removed' %}<div class="flash-ok">API key removed.</div>{% endif %}
+
+  <div class="settings-card">
+    <h5>Anthropic API key</h5>
+    <div class="settings-sub">
+      Used only for the AI "Suggest next checks" feature in Drift Investigation.
+      Everything else works without it.
+    </div>
+
+    <div class="key-state">
+      <span class="key-dot {{ 'on' if key_set else 'off' }}"></span>
+      {% if key_set %}
+        Key set{% if key_tail %} (ends in …{{ key_tail }}){% endif %}
+      {% else %}
+        No key set
+      {% endif %}
+    </div>
+
+    <form method="post" action="/settings/api-key" class="key-row">
+      <input type="password" class="form-control" name="api_key"
+             placeholder="sk-ant-…" autocomplete="off">
+      <button class="btn btn-dark btn-sm px-3" type="submit" name="action" value="save">Save</button>
+      {% if key_set %}
+      <button class="btn btn-outline-secondary btn-sm px-3" type="submit" name="action" value="remove"
+              formnovalidate>Remove</button>
+      {% endif %}
+    </form>
+
+    <div class="settings-note">
+      The key is stored in <code>{{ env_path }}</code> on this machine (readable only
+      by your user) and is sent only to the Anthropic API. Get a key at
+      <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.
+    </div>
+  </div>
+</div>
+{% endblock %}

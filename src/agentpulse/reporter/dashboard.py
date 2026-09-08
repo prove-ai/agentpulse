@@ -3377,6 +3377,41 @@ def api_runs():
 
 
 # ---------------------------------------------------------------------------
+# Settings — lets non-technical users store their Anthropic API key without
+# hand-editing the .env file. The key lands in <AGENTPULSE_HOME>/.env and in
+# this process's environment, so AI suggestions work immediately, no restart.
+# ---------------------------------------------------------------------------
+@app.route("/settings")
+def settings_page():
+    from agentpulse.paths import env_file
+    key = os.environ.get("ANTHROPIC_API_KEY", "")
+    return render_template(
+        "settings.html",
+        key_set=bool(key),
+        key_tail=key[-4:] if len(key) > 12 else "",
+        env_path=str(env_file()),
+        saved=request.args.get("saved"),
+    )
+
+
+@app.route("/settings/api-key", methods=["POST"])
+def settings_api_key():
+    from flask import redirect
+    from agentpulse.paths import set_env_value, unset_env_value
+    action = request.form.get("action", "save")
+    if action == "remove":
+        unset_env_value("ANTHROPIC_API_KEY")
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        return redirect("/settings?saved=removed")
+    key = (request.form.get("api_key") or "").strip()
+    if not key:
+        return redirect("/settings")
+    set_env_value("ANTHROPIC_API_KEY", key)
+    os.environ["ANTHROPIC_API_KEY"] = key
+    return redirect("/settings?saved=set")
+
+
+# ---------------------------------------------------------------------------
 # Entry point — `agentpulse dashboard` (or python -m agentpulse.reporter.dashboard)
 # ---------------------------------------------------------------------------
 def main(argv: list[str] | None = None) -> int:
