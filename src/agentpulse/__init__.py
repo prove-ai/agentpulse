@@ -12,5 +12,5 @@ Or, if you can't change how your app is launched, add two lines instead:
 
 from agentpulse.sdk.instrument import instrument
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __all__ = ["instrument", "__version__"]
