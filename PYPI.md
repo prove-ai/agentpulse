@@ -24,8 +24,6 @@ Then open the dashboard:
 agentpulse dashboard
 ```
 
-## Learn more
+## Documentation
 
-- [Documentation and screenshots](https://prove-ai.github.io/agentpulse/)
-- [Source, full README, and sample data](https://github.com/prove-ai/agentpulse)
-- [Feedback and issues](https://github.com/prove-ai/agentpulse/issues)
+See [the full documentation](https://github.com/prove-ai/agentpulse).
