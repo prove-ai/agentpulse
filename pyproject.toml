@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "agentpulse"
+name = "prove-agentpulse"
 version = "0.1.0"
 description = "Observability and drift detection for multi-agent systems (AutoGen, LangChain/LangGraph)"
 readme = "README.md"
