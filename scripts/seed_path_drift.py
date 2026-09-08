@@ -27,9 +27,9 @@ import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "src"))
 
-from storage.sqlite_store import resolve_db_path, get_connection  # noqa: E402
+from agentpulse.storage.sqlite_store import resolve_db_path, get_connection  # noqa: E402
 
 BASELINE = ["researcher", "analyst", "writer", "critic"]
 SKIP = ["researcher", "analyst", "writer"]

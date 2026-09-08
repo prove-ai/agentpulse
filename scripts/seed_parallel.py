@@ -20,9 +20,9 @@ import uuid
 from pathlib import Path
 
 _OBS_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(_OBS_ROOT))
+sys.path.insert(0, str(_OBS_ROOT / "src"))
 
-from storage.sqlite_store import get_connection, compute_cost
+from agentpulse.storage.sqlite_store import get_connection, compute_cost
 
 
 def insert_run(

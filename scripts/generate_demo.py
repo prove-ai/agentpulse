@@ -19,13 +19,13 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "src"))
 
 # Start from a clean slate. The importer keys spans/handoffs by a fresh UUID, so
 # re-importing into an existing DB ACCUMULATES spans (old + new) instead of
 # replacing them — which corrupts every per-agent metric. Delete the file first so
 # `generate_demo.py` is idempotent and always produces exactly N runs.
-from storage.sqlite_store import resolve_db_path  # noqa: E402
+from agentpulse.storage.sqlite_store import resolve_db_path  # noqa: E402
 
 _demo_db = Path(resolve_db_path("demo"))
 if _demo_db.exists():
@@ -123,7 +123,7 @@ subprocess.run([sys.executable, str(ROOT / "scripts/import_runs.py"), str(tmp)],
 tmp.unlink()
 
 # Two version snapshots at historical points so the boundaries fall mid-history.
-from storage.sqlite_store import resolve_db_path, get_connection  # noqa: E402
+from agentpulse.storage.sqlite_store import resolve_db_path, get_connection  # noqa: E402
 
 conn = get_connection(resolve_db_path("demo"))
 

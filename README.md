@@ -36,8 +36,8 @@ flowchart LR
 
 In words:
 
-1. You add two lines to your app. `instrument()` patches the OpenAI and Anthropic SDKs inside your process and hooks AutoGen and LangChain when they are present. With those frameworks, every LLM call, tool call, and handoff is captured with no other code changes; custom orchestrators need extra hooks (see [Framework support](#framework-support)).
-2. Captured events are written through `storage/` into a plain SQLite file per project, `db/<project>.db`. No server, no agent daemon.
+1. You launch your app through `agentpulse run` — no code changes. It patches the OpenAI and Anthropic SDKs inside your process and hooks AutoGen and LangChain when they are present. With those frameworks, every LLM call, tool call, and handoff is captured automatically; custom orchestrators are not officially supported (see [Framework support](#framework-support)).
+2. Captured events are written through `storage/` into a plain SQLite file per project, `~/.agentpulse/db/<project>.db`. No server, no agent daemon.
 3. The `analysis/` engine reads those runs and computes metrics, anomaly reports, drift findings, and causal chains.
 4. Three surfaces present the same findings: the Flask dashboard, the `today-drift` CLI, and the MCP server that Claude Code or Claude Desktop connects to.
 
@@ -63,7 +63,7 @@ Even if you never run AgentPulse, these design decisions carry over to any in-ho
 
 4. **A change can only explain a drift if it could have caused it.** Config, prompt, and model changes are attributed only when they happened at or before the drift start, on the same or an upstream component. (`_nearby_change` in `analysis/drift_detect.py`)
 
-5. **Give the investigation to a coding agent, not just a dashboard.** The MCP server exposes findings as structured, root-cause-led cards, so Claude can triage drift, compare releases, and propose next checks conversationally. (`agentpulse_mcp.py`, `.claude/skills/`)
+5. **Give the investigation to a coding agent, not just a dashboard.** The MCP server exposes findings as structured, root-cause-led cards, so Claude can triage drift, compare releases, and propose next checks conversationally. (`src/agentpulse/mcp_server.py`, `.claude/skills/`)
 
 6. **Pin your metric engine with a snapshot test.** Every chart value for the sample data is pinned by a fixture. A refactor that silently changes a metric fails CI loudly. (`tests/test_series_snapshot.py`)
 
@@ -71,42 +71,55 @@ Even if you never run AgentPulse, these design decisions carry over to any in-ho
 
 ## Getting started
 
-### Step 1: run the dashboard with the demo data
+### Step 1: install
+
+```bash
+pip install proveai-agentpulse
+```
+
+To try the dashboard with the bundled sample project first (a 4-agent content pipeline with 120 runs across 4 prompt versions and one real drift), clone the repo and point AgentPulse at its data:
 
 ```bash
 git clone https://github.com/prove-ai/agentpulse.git
-cd agentpulse
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python reporter/dashboard.py
+AGENTPULSE_HOME=./agentpulse agentpulse dashboard
 ```
 
-Open <http://localhost:5001>. You are looking at the bundled sample project (`db/demo.db`, a 4-agent content pipeline with 120 runs across 4 prompt versions and one real drift), so the Drift Investigation view above is the first thing you can reproduce.
+Open <http://localhost:5001> — the Drift Investigation view above is the first thing you can reproduce.
 
-### Step 2: instrument your own system
+### Step 2: capture your own system
 
-This is the step that gets your own runs in. Add two lines at the top of your entrypoint (before any agent imports):
+No code changes — launch your app through `agentpulse run` instead of `python`:
+
+```bash
+agentpulse run python main.py
+```
+
+If your system runs on a supported framework (see the table below), that is the whole integration. Every LLM call, agent turn, tool call, and handoff is captured into `~/.agentpulse/db/runs.db`. Then run `agentpulse dashboard` and your project appears in the sidebar picker. Your data stays on your machine — it's plain SQLite in your home directory.
+
+To monitor several systems side by side, give each its own database:
+
+```bash
+AGENTPULSE_DB=my-system agentpulse run python main.py
+```
+
+If you can't change how your app is launched (a notebook, a process manager), add two lines at the top of your entry point instead — this is exactly what `agentpulse run` does for you:
 
 ```python
-import sys; sys.path.insert(0, '/path/to/agentpulse')
-from sdk import instrument
-instrument(task_type='my-system', prompt_version=1, db_name='my-system')
+import agentpulse
+agentpulse.instrument()
 ```
-
-If your system runs on a supported framework (see the table below), that is the whole integration. Run it as usual, and every LLM call, agent turn, tool call, and handoff is captured into `db/my-system.db`. Reload the dashboard and `my-system` appears in the sidebar picker next to `demo`. Pass a different `db_name` per system to monitor several at once. Your own `db/*.db` files stay on your machine; they are gitignored, and only the demo sample is part of the repo.
 
 ### Framework support
 
-The two lines above are the whole story only when your framework tells AgentPulse where agent boundaries are. Be aware of the difference:
+`agentpulse run` is the whole story only when your framework tells AgentPulse where agent boundaries are:
 
 | Your stack | Integration effort | What you get |
 |---|---|---|
-| AutoGen (`SelectorGroupChat`) | The two lines, nothing else | Full capture: turns, tokens, tools, handoffs, termination |
-| LangChain, LangGraph, and frameworks built on LangChain callbacks (e.g. CrewAI) | The two lines, nothing else | Full capture: each chain/node reports its name through the callback system; tokens come from the SDK patches |
-| Plain OpenAI/Anthropic SDK with your own orchestration (e.g. `asyncio.gather`) | Manual work on top of the two lines | The SDK patches record tokens, latency, and model per call, but you must open and close the run yourself and mark agent boundaries |
+| AutoGen (`SelectorGroupChat`) | `agentpulse run`, nothing else | Full capture: turns, tokens, tools, handoffs, termination |
+| LangChain, LangGraph, and frameworks built on LangChain callbacks (e.g. CrewAI) | `agentpulse run`, nothing else | Full capture: each chain/node reports its name through the callback system; tokens come from the SDK patches |
+| Plain OpenAI/Anthropic SDK with your own orchestration (e.g. `asyncio.gather`) | Not officially supported | — |
 
-The reason for the difference: AutoGen and LangChain expose agent boundaries through their event and callback systems, so AgentPulse can attribute every call to the right agent automatically. A hand-rolled orchestrator has no such signal, so you provide it yourself: open a `RunSession`, call `set_active_agent()` at each agent's entry (it is a ContextVar, so parallel `asyncio.gather` tasks stay correctly attributed), and mark turns with `on_turn_start` / `on_turn_end`. The primitives live in [`sdk/session.py`](sdk/session.py), and the adapters in [`sdk/patches/`](sdk/patches) are working examples of how to drive them.
+The reason for the difference: AutoGen and LangChain expose agent boundaries through their event and callback systems, so AgentPulse can attribute every call to the right agent automatically. A hand-rolled orchestrator has no such signal, so automatic capture is not possible and custom pipelines are not officially supported. (If you really need one, the session primitives in [`src/agentpulse/sdk/session.py`](src/agentpulse/sdk/session.py) are what the adapters in [`src/agentpulse/sdk/patches/`](src/agentpulse/sdk/patches) drive — but you're off the supported path.)
 
 ### What gets captured
 
@@ -140,18 +153,18 @@ There is also a trend view (`/trends`) with agent health cards and a handoff hea
 
 ---
 
-## CLI: `today-drift`
+## CLI: `agentpulse drift`
 
 The drift findings as terminal cards, with no server and no Claude involved:
 
 ```bash
-python cli.py                          # all projects, active drifts
-python cli.py --project demo           # one project
-python cli.py --range 7d               # narrower look-back window (default 30d)
-python cli.py --min-severity drift     # hide low-signal watches
-python cli.py --next demo:chain0       # next investigation checks for one finding
-python cli.py --compare --project demo # version comparison (baseline vs newest)
-python cli.py --compare --project demo --all   # step through every version pair
+agentpulse drift                          # all projects, active drifts
+agentpulse drift --project demo           # one project
+agentpulse drift --range 7d               # narrower look-back window (default 30d)
+agentpulse drift --min-severity drift     # hide low-signal watches
+agentpulse drift --next demo:chain0       # next investigation checks for one finding
+agentpulse drift --compare --project demo # version comparison (baseline vs newest)
+agentpulse drift --compare --project demo --all   # step through every version pair
 ```
 
 Sample output:
@@ -174,13 +187,13 @@ AgentPulse — 1 drift finding  · as of 2026-07-16 17:09 · range 30d · demo
 
 Findings carry an `id` (like `demo:chain0`). Pass it to `--next` to get the recommended follow-up checks for that finding.
 
-There is also `report.py`, a per-run metrics report for a single project (`python report.py --all --db demo`).
+There is also `agentpulse report`, a per-run metrics report for a single project (`agentpulse report --all --db demo`).
 
 ---
 
 ## MCP server: let Claude run the investigation
 
-`agentpulse_mcp.py` exposes the drift engine to Claude Code and Claude Desktop as three tools:
+`agentpulse mcp` (install with `pip install "proveai-agentpulse[mcp]"`) exposes the drift engine to Claude Code and Claude Desktop as three tools:
 
 | Tool | What it returns |
 |---|---|
@@ -202,7 +215,7 @@ Then ask things like *"what drifted today?"*, *"compare versions of the demo pro
 To register it from another directory instead:
 
 ```bash
-claude mcp add agentpulse -- /path/to/agentpulse/.venv/bin/python /path/to/agentpulse/agentpulse_mcp.py
+claude mcp add agentpulse -- agentpulse mcp
 ```
 
 The repo also bundles three Claude Code **skills** under [`.claude/skills/`](.claude/skills) that build on these tools: `drift-triage` (daily standup-style triage), `drift-root-cause-report` (a written root-cause report), and `release-regression-check` (did the last release break anything?).
@@ -215,8 +228,8 @@ Add to `claude_desktop_config.json`. Use absolute paths, because Desktop spawns 
 {
   "mcpServers": {
     "agentpulse": {
-      "command": "/path/to/agentpulse/.venv/bin/python",
-      "args": ["/path/to/agentpulse/agentpulse_mcp.py"]
+      "command": "/path/to/your/venv/bin/agentpulse",
+      "args": ["mcp"]
     }
   }
 }
@@ -226,9 +239,20 @@ Add to `claude_desktop_config.json`. Use absolute paths, because Desktop spawns 
 
 ## Configuration
 
-Copy [`.env.example`](.env.example) to `.env` and set `ANTHROPIC_API_KEY` to enable the AI "suggest next checks" feature (dashboard button, CLI `--next`, MCP `get_next_check_steps`). Everything else works without it; the MCP tool falls back to deterministic checks.
+All AgentPulse data lives under one home directory, `~/.agentpulse` by default (override with `AGENTPULSE_HOME`):
 
-Drift detection thresholds and handoff rules live in [`config/drift_rules.yaml`](config/drift_rules.yaml). Edit and reload the page; no restart needed.
+```
+~/.agentpulse/
+├── db/        one SQLite file per project
+├── config/    optional overrides, e.g. drift_rules.yaml
+└── .env       optional KEY=VALUE env file
+```
+
+Set `ANTHROPIC_API_KEY` in `~/.agentpulse/.env` (or your shell environment) to enable the AI "suggest next checks" feature (dashboard button, CLI `--next`, MCP `get_next_check_steps`). Everything else works without it; the MCP tool falls back to deterministic checks.
+
+Drift detection thresholds and handoff rules ship inside the package ([`src/agentpulse/config/drift_rules.yaml`](src/agentpulse/config/drift_rules.yaml)); to tune them, copy that file to `~/.agentpulse/config/drift_rules.yaml` and edit — it takes precedence, and the dashboard reloads it on every request, no restart needed.
+
+Per-run labels are set with environment variables when launching: `AGENTPULSE_DB` (project database name), `AGENTPULSE_TASK_TYPE` (groups like-with-like in drift reports), and `AGENTPULSE_PROMPT_VERSION` (bump when you change prompts). All are optional.
 
 ---
 
@@ -238,7 +262,7 @@ This project is an experiment in how agent failures should be investigated. If y
 
 - What telemetry do you actually collect for multi-agent systems, and what does AgentPulse's schema miss?
 - Does the agent / handoff / route drift split match how you triage failures?
-- Where is the drift detector wrong? Thresholds live in [`config/drift_rules.yaml`](config/drift_rules.yaml). If it over-fires or under-fires on your data, that is useful feedback.
+- Where is the drift detector wrong? Thresholds live in [`src/agentpulse/config/drift_rules.yaml`](src/agentpulse/config/drift_rules.yaml). If it over-fires or under-fires on your data, that is useful feedback.
 - Should agent observability stay a dashboard, or become structured context for a coding agent that performs the investigation? The MCP server is a bet on the second answer.
 
 ## Feedback
@@ -253,23 +277,31 @@ For private feedback, contact me at [leyla@proveai.com](mailto:leyla@proveai.com
 
 ```
 agentpulse/
-├── sdk/                Patches for OpenAI/Anthropic + the instrument() entry point
-├── storage/            SQLite store (multi-DB aware via ContextVar)
-├── analysis/           Metric engine: raw → derived → anomalies → trends → drift → DAG
-├── reporter/           Flask dashboard + Jinja templates
-├── cli.py              today-drift terminal CLI
-├── agentpulse_mcp.py   MCP server (3 tools over the same engine)
-├── report.py           Per-run metrics report CLI
-├── config/             Drift rules + default prompt manifests
-├── scripts/            Demo generators & import helpers
-├── tests/              pytest suite (incl. a metric snapshot guard)
-├── .claude/skills/     Claude Code skills built on the MCP tools
-└── db/                 demo.db sample (your own project DBs land here, gitignored)
+├── pyproject.toml            Package definition (`pip install .`, `agentpulse` CLI)
+├── src/agentpulse/
+│   ├── sdk/                  Patches for OpenAI/Anthropic + the instrument() entry point
+│   ├── storage/              SQLite store (multi-DB aware via ContextVar)
+│   ├── analysis/             Metric engine: raw → derived → anomalies → trends → drift → DAG
+│   ├── reporter/             Flask dashboard + Jinja templates
+│   ├── config/               Default drift rules + prompt manifests (shipped in the package)
+│   ├── runner.py             `agentpulse run` — zero-code-change launcher
+│   ├── cli.py                The `agentpulse` command (run/report/dashboard/drift/mcp)
+│   ├── drift_cli.py          Drift findings as terminal cards
+│   ├── report.py             Per-run metrics report
+│   └── mcp_server.py         MCP server (3 tools over the same engine)
+├── scripts/                  Demo generators & import helpers
+├── tests/                    pytest suite (incl. a metric snapshot guard)
+├── .claude/skills/           Claude Code skills built on the MCP tools
+└── db/                       demo.db sample data
 ```
 
 ## Development
 
 ```bash
+git clone https://github.com/prove-ai/agentpulse.git
+cd agentpulse
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[all]" pytest
 python -m pytest tests/          # run the test suite
 ```
 
@@ -278,7 +310,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the snapshot-test workflow and guidel
 ## Requirements
 
 - Python 3.10+
-- Flask 3.x (dashboard) and `mcp` (MCP server), both in `requirements.txt`
+- Optional extras: `proveai-agentpulse[mcp]` (MCP server), `proveai-agentpulse[ai]` (AI next-check suggestions), `proveai-agentpulse[otel]` (OTel export), `proveai-agentpulse[all]`
 - The multi-agent system you observe needs `openai` and/or `anthropic` installed in **its** environment. AgentPulse patches whichever it finds; neither is a hard dependency of AgentPulse itself.
 
 ## License

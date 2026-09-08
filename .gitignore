@@ -43,3 +43,8 @@ db/*.db-shm
 # Raw hero footage (compressed copies are committed in site/public and docs)
 site/hero_video.mp4
 site/river.mp4
+
+# Packaging artifacts
+build/
+dist/
+*.egg-info/

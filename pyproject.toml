@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "proveai-agentpulse"
+version = "0.1.0"
+description = "Observability and drift detection for multi-agent systems (AutoGen, LangChain/LangGraph)"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = [
+    "flask>=3.0",
+    "pyyaml>=6.0",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+# AI triage ("Suggest next checks") in Drift Investigation
+ai = ["anthropic>=0.40"]
+# MCP server — exposes the drift engine to Claude Code / Desktop
+mcp = ["mcp>=1.0"]
+# OTel exporters (scripts/otel_export.py)
+otel = ["opentelemetry-sdk>=1.24", "opentelemetry-api>=1.24"]
+all = ["proveai-agentpulse[ai,mcp,otel]"]
+
+# NOTE: openai / anthropic SDKs are NOT dependencies. instrument() patches
+# whichever is already installed in the system being observed.
+
+[project.scripts]
+agentpulse = "agentpulse.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+agentpulse = [
+    "config/*.yaml",
+    "reporter/templates/*.html",
+    "reporter/static/*",
+]

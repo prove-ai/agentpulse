@@ -14,11 +14,13 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.join(ROOT, "src"))
 
-from storage.sqlite_store import set_active_db_path, resolve_db_path  # noqa: E402
-from analysis.layer1_raw import list_runs                            # noqa: E402
-from analysis.metric_series import per_run_series                           # noqa: E402
+from pathlib import Path                                                        # noqa: E402
+
+from agentpulse.storage.sqlite_store import set_active_db_path                  # noqa: E402
+from agentpulse.analysis.layer1_raw import list_runs                            # noqa: E402
+from agentpulse.analysis.metric_series import per_run_series                           # noqa: E402
 
 FIXTURE = os.path.join(ROOT, "tests", "fixtures", "series_snapshot.json")
 DBS = ["demo"]  # the committed sample database (private project DBs are gitignored)
@@ -27,7 +29,9 @@ DBS = ["demo"]  # the committed sample database (private project DBs are gitigno
 def _current() -> dict:
     out = {}
     for db in DBS:
-        set_active_db_path(resolve_db_path(db))
+        # The sample DB is committed in the repo, not under the user's
+        # AgentPulse home — address it by explicit path.
+        set_active_db_path(Path(ROOT) / "db" / f"{db}.db")
         # round-trip through JSON so the comparison is order-insensitive on keys
         out[db] = json.loads(json.dumps(per_run_series(list_runs(2000)), sort_keys=True))
     return out

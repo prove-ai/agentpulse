@@ -12,11 +12,11 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "src"))
 random.seed(11)
 
-from analysis.layer1_raw import list_runs                       # noqa: E402
-from storage.sqlite_store import (resolve_db_path, set_active_db_path,   # noqa: E402
+from agentpulse.analysis.layer1_raw import list_runs                       # noqa: E402
+from agentpulse.storage.sqlite_store import (resolve_db_path, set_active_db_path,   # noqa: E402
                                   clear_events, upsert_event)
 
 set_active_db_path(resolve_db_path("demo"))

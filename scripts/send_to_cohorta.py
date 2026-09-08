@@ -21,7 +21,11 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-DB_DIR = Path(__file__).parent.parent / "db"
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+from agentpulse.paths import db_dir
+
+DB_DIR = db_dir()
 
 
 def rows(conn, sql: str, *args) -> list[dict]:

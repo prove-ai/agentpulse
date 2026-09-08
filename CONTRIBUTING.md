@@ -9,13 +9,13 @@ git clone https://github.com/prove-ai/agentpulse.git
 cd agentpulse
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e ".[all]" pytest
 ```
 
 Run the dashboard against the bundled sample database (`db/demo.db`):
 
 ```bash
-python reporter/dashboard.py     # http://localhost:5001
+AGENTPULSE_HOME=. agentpulse dashboard     # http://localhost:5001
 ```
 
 ## Running tests
@@ -40,18 +40,19 @@ doing its job — investigate before updating.
 
 | Area | Path |
 |---|---|
-| Instrumentation (SDK patches) | `sdk/` |
-| SQLite storage | `storage/` |
-| Metric + drift engine | `analysis/` |
-| Flask dashboard | `reporter/` |
-| Drift CLI (`today-drift`) | `cli.py` |
-| MCP server for Claude | `agentpulse_mcp.py` |
-| Detection thresholds/rules | `config/drift_rules.yaml` |
+| Instrumentation (SDK patches) | `src/agentpulse/sdk/` |
+| SQLite storage | `src/agentpulse/storage/` |
+| Metric + drift engine | `src/agentpulse/analysis/` |
+| Flask dashboard | `src/agentpulse/reporter/` |
+| Drift CLI (`agentpulse drift`) | `src/agentpulse/drift_cli.py` |
+| MCP server for Claude | `src/agentpulse/mcp_server.py` |
+| Detection thresholds/rules | `src/agentpulse/config/drift_rules.yaml` |
 
 ## Guidelines
 
 - The drift engine is shared by the dashboard, the CLI, and the MCP server —
-  change behaviour in `analysis/` (or `reporter/dashboard.py` helpers), not in
+  change behaviour in `analysis/` (or `reporter/dashboard.py` helpers under
+  `src/agentpulse/`), not in
   a single surface, so all three stay in agreement.
 - Detection thresholds belong in `config/drift_rules.yaml`, not in code.
 - Keep the SDK dependency-light: `openai`/`anthropic` must remain optional
