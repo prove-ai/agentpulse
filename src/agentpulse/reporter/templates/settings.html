@@ -38,8 +38,7 @@
   <div class="settings-card">
     <h5>Anthropic API key</h5>
     <div class="settings-sub">
-      Used only for the AI "Suggest next checks" feature in Drift Investigation.
-      Everything else works without it.
+      Enables AI suggestions in Drift Investigation. Optional.
     </div>
 
     <div class="key-state">
@@ -62,8 +61,7 @@
     </form>
 
     <div class="settings-note">
-      The key is stored in <code>{{ env_path }}</code> on this machine (readable only
-      by your user) and is sent only to the Anthropic API. Get a key at
+      Stored locally in <code>{{ env_path }}</code>. Get a key at
       <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.
     </div>
   </div>
