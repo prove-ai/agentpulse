@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from agentpulse.analysis.run_anomaly import DEFAULTS
 from agentpulse.analysis.run_insights import Insight
 
-MIN_RUNS = 1  # TEMP: lowered from 3 for single-run-per-cohort smoke test - revert after
+MIN_RUNS = 3
 
 # A drift is "confirmed" only when at least this fraction of target-cohort
 # runs shift in the same direction as the cohort average. Otherwise the shift

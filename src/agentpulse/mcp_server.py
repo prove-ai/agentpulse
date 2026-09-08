@@ -228,10 +228,7 @@ def _critical_between(labels, base_v, target_v, task_type, ver_options):
         invs, _ = investigations_for(range_param="3650d", task_type=task_type,
                                      base=a, compared=True, to=[b])
         for x in invs:
-            # TEMP: "candidate" admitted for the single-run-per-cohort smoke test -
-            # tiny windows can't corroborate enough to reach "drift". Revert to
-            # ("high", "drift") together with the other TEMP threshold changes.
-            if x["severity"] in ("high", "drift", "candidate") and x["title"] not in seen:
+            if x["severity"] in ("high", "drift") and x["title"] not in seen:
                 seen.add(x["title"])
                 out.append((b, x))
     return out
@@ -250,9 +247,7 @@ def _compare_pair(all_runs, labels, vof, base_v, target_v, task_type, ver_option
         "base": {"version": base_v, "label": labels.get(base_v, f"v{base_v}"), "runs": len(base_runs)},
         "target": {"version": target_v, "label": labels.get(target_v, f"v{target_v}"), "runs": len(tgt_runs)},
     }
-    # TEMP: gate lowered from 3 to match analysis.version_drift.MIN_RUNS for the
-    # single-run-per-cohort smoke test - revert both together. (Better fix: import
-    # MIN_RUNS from analysis.version_drift so this can't diverge again.)
+    # Shared with analysis.version_drift so the two gates can't diverge.
     from agentpulse.analysis.version_drift import MIN_RUNS as _MIN_RUNS
     if len(base_runs) < _MIN_RUNS or len(tgt_runs) < _MIN_RUNS:
         return {"ok": False, "comparing": comparing,

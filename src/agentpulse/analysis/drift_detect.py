@@ -137,9 +137,9 @@ def _adjacent(scope: str, entity: str, all_entities: dict) -> set:
         for ag in (a.strip(), b.strip()):
             members.add(("agents", ag))
     elif scope == "path":
-        # TEMP: a system-wide path finding (route drift) may be corroborated by any
-        # agent or handoff signal - the route IS the composition of those components.
-        # Consider keeping this permanently; without it path findings can never escalate.
+        # A system-wide path finding (route drift) may be corroborated by any
+        # agent or handoff signal - the route IS the composition of those
+        # components. Without this, path findings can never escalate.
         for ag in all_entities.get("agents", []):
             members.add(("agents", ag))
         for h in all_entities.get("handoffs", []):
@@ -161,8 +161,7 @@ def metric_breaches(series: dict, cfg: dict) -> list[dict]:
         for entity in series.get(scope, {}):
             mc = {**base, "_entity": entity}
             vals, is_event, xs = _vals(series, mc, metric)
-            # TEMP: was < 3 - lowered for single-run-per-cohort smoke test, revert after
-            if not vals or len(vals) < 2:
+            if not vals or len(vals) < 3:
                 continue
             bvals, rvals = vals[:baseline_runs], vals[-recent_runs:]
             bm, rm = _mean(bvals), _mean(rvals)

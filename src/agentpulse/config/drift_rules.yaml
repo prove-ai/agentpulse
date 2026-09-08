@@ -239,7 +239,7 @@ agent_status:
 #                               (-0.15 = a 15-point success drop)
 # ===========================================================================
 agent_risk:
-  min_runs: 1                 # TEMP: was 5 - single-run-per-cohort smoke test, revert after
+  min_runs: 5                 # fewer total appearances -> "Insufficient data"
 
   # A behavior signal fires when its delta crosses the threshold. The agent's
   # OWN latency is behaviour (a change in how it works), never a risk by itself.
@@ -304,8 +304,8 @@ metric_band:
 # A steady, known low-rate fallback therefore stays quiet.
 # ===========================================================================
 path_drift:
-  min_runs: 2            # TEMP: was 8 - smoke test, revert after
-  min_variant_runs: 1    # TEMP: was 2 - smoke test (each drifted route occurs once), revert after
+  min_runs: 8            # need at least this many runs before assessing
+  min_variant_runs: 2    # a variant must occur this many times to count (ignore singletons)
   rise_threshold: 0.15   # a known variant whose recent share rises >= this (15 pts) = drift
   high_if_skipped: true  # a variant that SKIPS a default step -> High risk
 
@@ -329,52 +329,49 @@ path_drift:
 # (decides HOW BAD) lands in watch/drift/high.
 # ===========================================================================
 metric_drift:
-  baseline_runs: 10        # = the 10 v1 runs (original value 10 - happens to fit the experiment)
-  recent_runs: 20          # TEMP: was 10 - covers the v2+v3 batches as the recent window
-  start_consecutive: 1     # TEMP: was 2 - single breach starts an investigation, revert after
-  start_m_of_n: [1, 5]     # TEMP: was [3, 5] - one breach in the last 5 is enough, revert after
+  baseline_runs: 10        # first N runs = baseline
+  recent_runs: 10          # trailing window for the mean delta
+  start_consecutive: 2     # Tier-0 per-run breaches in a row to start an investigation
+  start_m_of_n: [3, 5]     # ...OR breaches in M of the last N runs
   exclude_from_corroboration: [parallelism_factor]
   # Severity escalation: only supporters at these bands count toward "Critical"
   # (watch-band signals are too weak); a corroborating config change is ignored if
   # its (scope, dimension) recurs more than change_recurrence_max times (a routine
   # per-release prompt bump shouldn't corroborate a drift).
-  strong_support_bands: [watch, drift, high]  # TEMP: was [drift, high] - watch-band supporters now corroborate
+  strong_support_bands: [drift, high]
   change_recurrence_max: 2
   # Recovery / expiry: a drift that has been back within normal for this many recent
   # runs is treated as resolved and no longer surfaced (a spike that recovered is
   # not "today's" problem).
-  recovery_grace: 10  # TEMP: was 2 - a 2-clean-run tail was expiring the route drift as "recovered"
+  recovery_grace: 2
   # Cause attribution: a config change is a candidate CAUSE only if it happened at or
   # before the drift start, within this many runs, on the SAME or an UPSTREAM
   # component. Used by BOTH severity escalation (_nearby_change) and the
   # "Potentially related changes" panel, so they agree on what counts as a cause.
   related_change_window: 3
 
-  # TEMP: all bands loosened to ~half their original values so smaller changes
-  # register as drift (originals kept in the git history / the comment above each
-  # was: see repo history). Revert by restoring the previous block.
   metrics:
     # --- agents ---
-    success:            {scope: agents,   tier: 0, dir: down, unit: pp,  watch: 1,  drift: 2,  high: 5}
-    error_rate:         {scope: agents,   tier: 0, dir: up,   unit: pp,  watch: 1,  drift: 2,  high: 5, source: errors}
-    retry_rate:         {scope: agents,   tier: 1, dir: up,   unit: pp,  watch: 2,  drift: 5, source: retries}
-    reinvocation_rate:  {scope: agents,   tier: 1, dir: up,   unit: pp,  watch: 2,  drift: 5, source: reinvoked}
-    latency_s:          {scope: agents,   tier: 0, dir: up,   unit: pct, watch: 10, drift: 20, abs: {watch: 1.0, drift: 2.5, high: 5.0}}
-    tool_calls:         {scope: agents,   tier: 0, dir: both, unit: pct, watch: 15, drift: 25, abs: {watch: 1, drift: 2, high: 5}}
-    tokens:             {scope: agents,   tier: 0, dir: both, unit: pct, watch: 15, drift: 25}
-    cost_usd:           {scope: agents,   tier: 2, dir: up,   unit: pct, watch: 10, drift: 25}
-    token_share:        {scope: agents,   tier: 2, dir: up,   unit: pp,  watch: 5,  drift: 8, scale: pct100}
+    success:            {scope: agents,   tier: 0, dir: down, unit: pp,  watch: 3,  drift: 5,  high: 10}
+    error_rate:         {scope: agents,   tier: 0, dir: up,   unit: pp,  watch: 3,  drift: 5,  high: 10, source: errors}
+    retry_rate:         {scope: agents,   tier: 1, dir: up,   unit: pp,  watch: 5,  drift: 10, source: retries}
+    reinvocation_rate:  {scope: agents,   tier: 1, dir: up,   unit: pp,  watch: 5,  drift: 10, source: reinvoked}
+    latency_s:          {scope: agents,   tier: 1, dir: up,   unit: pct, watch: 25, drift: 45, abs: {watch: 2.0, drift: 5.0, high: 10.0}}
+    tool_calls:         {scope: agents,   tier: 2, dir: both, unit: pct, watch: 30, drift: 50, abs: {watch: 2, drift: 5, high: 10}}
+    tokens:             {scope: agents,   tier: 2, dir: both, unit: pct, watch: 30, drift: 50}
+    cost_usd:           {scope: agents,   tier: 2, dir: up,   unit: pct, watch: 25, drift: 50}
+    token_share:        {scope: agents,   tier: 2, dir: up,   unit: pp,  watch: 10, drift: 17, scale: pct100}
     # --- handoffs ---
-    hop_latency_s:      {scope: handoffs, tier: 0, dir: up,   unit: pct, watch: 15, drift: 25, abs: {watch: 0.5, drift: 1.5, high: 3.0}}
-    payload_tokens:     {scope: handoffs, tier: 0, dir: both, unit: pct, watch: 15, drift: 30, abs: {watch: 150, drift: 400, high: 1000}}
-    context_ratio:      {scope: handoffs, tier: 0, dir: both, unit: pct, watch: 15, drift: 25, abs: {watch: 0.5, drift: 1.5, high: 3.0}}
-    frequency:          {scope: handoffs, tier: 0, dir: both, unit: pct, watch: 10, drift: 20, abs: {watch: 0.5, drift: 1.5, high: 3}}
+    hop_latency_s:      {scope: handoffs, tier: 0, dir: up,   unit: pct, watch: 30, drift: 50, abs: {watch: 1.0, drift: 3.0, high: 6.0}}
+    payload_tokens:     {scope: handoffs, tier: 1, dir: both, unit: pct, watch: 30, drift: 60, abs: {watch: 300, drift: 800, high: 2000}}
+    context_ratio:      {scope: handoffs, tier: 1, dir: both, unit: pct, watch: 30, drift: 50, abs: {watch: 1.0, drift: 3.0, high: 6.0}}
+    frequency:          {scope: handoffs, tier: 2, dir: both, unit: pct, watch: 20, drift: 40, abs: {watch: 1, drift: 3, high: 6}}
     # --- path ---
-    route_conformance:  {scope: path,     tier: 0, dir: down, unit: pp,  watch: 2,  drift: 5,  high: 10, floor: 0.85}
-    e2e_latency_s:      {scope: path,     tier: 0, dir: up,   unit: pct, watch: 10, drift: 20, abs: {watch: 2.5, drift: 7.0, high: 15.0}}
-    path_length:        {scope: path,     tier: 0, dir: both, unit: abs, watch: 0.5, drift: 1}
-    loops:              {scope: path,     tier: 1, dir: up,   unit: abs, watch: 0.5, drift: 1}
-    reentry_count:      {scope: path,     tier: 1, dir: up,   unit: abs, watch: 0.25, drift: 0.5}
-    token_concentration: {scope: path,    tier: 2, dir: up,   unit: pp,  watch: 5,  drift: 8}
-    context_growth_pct: {scope: path,     tier: 2, dir: up,   unit: pct, watch: 10, drift: 25}
-    parallelism_factor: {scope: path,     tier: 3, dir: both, unit: pct, watch: 10, drift: 20}
+    route_conformance:  {scope: path,     tier: 0, dir: down, unit: pp,  watch: 5,  drift: 10, high: 20, floor: 0.7}
+    e2e_latency_s:      {scope: path,     tier: 0, dir: up,   unit: pct, watch: 25, drift: 45, abs: {watch: 5.0, drift: 15.0, high: 30.0}}
+    path_length:        {scope: path,     tier: 1, dir: both, unit: abs, watch: 1,  drift: 2}
+    loops:              {scope: path,     tier: 1, dir: up,   unit: abs, watch: 1,  drift: 1}
+    reentry_count:      {scope: path,     tier: 1, dir: up,   unit: abs, watch: 0.5, drift: 1}
+    token_concentration: {scope: path,    tier: 2, dir: up,   unit: pp,  watch: 10, drift: 17}
+    context_growth_pct: {scope: path,     tier: 2, dir: up,   unit: pct, watch: 25, drift: 50}
+    parallelism_factor: {scope: path,     tier: 3, dir: both, unit: pct, watch: 20, drift: 40}
