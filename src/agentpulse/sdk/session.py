@@ -79,6 +79,13 @@ class LLMCallRecord:
     request_json:  str = ""   # full request: messages, system, tools, params
     response_json: str = ""   # full response: content blocks, stop_reason, usage
     agent:         Optional[str] = None  # tagged from the active-agent ContextVar
+    # Prompt-cache accounting (Anthropic: separate from input_tokens; OpenAI:
+    # cached tokens are a subset of input_tokens). Needed for correct cost.
+    cache_read_tokens:     int = 0
+    cache_creation_tokens: int = 0
+    # Set when the API call raised instead of returning: "ExcType: message".
+    # A failed call still gets a record so retries and outages are visible.
+    error:         str = ""
 
 
 # ---------------------------------------------------------------------------

@@ -68,6 +68,8 @@ class _StreamAccumulator:
         self.stop_reason = None
         self.input_tokens = 0
         self.output_tokens = 0
+        self.cache_read_tokens = 0
+        self.cache_creation_tokens = 0
 
     def absorb(self, event) -> None:
         try:
@@ -77,6 +79,8 @@ class _StreamAccumulator:
                 self.model = str(getattr(msg, "model", "") or "")
                 usage = getattr(msg, "usage", None)
                 self.input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+                self.cache_read_tokens = int(getattr(usage, "cache_read_input_tokens", 0) or 0)
+                self.cache_creation_tokens = int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
             elif et == "content_block_start":
                 cb = getattr(event, "content_block", None)
                 btype = getattr(cb, "type", "unknown")
@@ -143,6 +147,8 @@ def _record_stream(acc: _StreamAccumulator, start_ns: int, end_ns: int,
             input_tokens=acc.input_tokens, output_tokens=acc.output_tokens,
             model=acc.model, request_json=request_json,
             response_json=acc.response_json(), agent=agent,
+            cache_read_tokens=acc.cache_read_tokens,
+            cache_creation_tokens=acc.cache_creation_tokens,
         ))
 
 
@@ -252,6 +258,8 @@ def _record(response, start_ns, end_ns, request_json):
         usage = getattr(response, "usage", None)
         inp   = int(getattr(usage, "input_tokens",  0) or 0) if usage else 0
         out   = int(getattr(usage, "output_tokens", 0) or 0) if usage else 0
+        cr    = int(getattr(usage, "cache_read_input_tokens",     0) or 0) if usage else 0
+        cc    = int(getattr(usage, "cache_creation_input_tokens", 0) or 0) if usage else 0
         model = str(getattr(response, "model", "") or "")
         session._pending_api_calls.append(LLMCallRecord(
             start_ns=start_ns, end_ns=end_ns,
@@ -259,6 +267,21 @@ def _record(response, start_ns, end_ns, request_json):
             request_json=request_json,
             response_json=_response_payload(response),
             agent=get_active_agent(),
+            cache_read_tokens=cr, cache_creation_tokens=cc,
+        ))
+
+
+def _record_error(exc, start_ns, request_json):
+    """A failed API call still gets a record, so outages and retries show up."""
+    session = get_active_session()
+    if session is not None:
+        session._pending_api_calls.append(LLMCallRecord(
+            start_ns=start_ns, end_ns=time.time_ns(),
+            input_tokens=0, output_tokens=0, model="",
+            request_json=request_json,
+            response_json="",
+            agent=get_active_agent(),
+            error=f"{type(exc).__name__}: {str(exc)[:500]}",
         ))
 
 
@@ -275,7 +298,11 @@ def _patch_pair(messages_cls, async_messages_cls):
     def _patched_sync_create(self, *args, **kwargs):
         start_ns = time.time_ns()
         request_json = _request_payload(kwargs)
-        response = original_sync_create(self, *args, **kwargs)
+        try:
+            response = original_sync_create(self, *args, **kwargs)
+        except Exception as exc:
+            _record_error(exc, start_ns, request_json)
+            raise
         parsed = response
         if _is_raw(response):
             # parse() caches, so the caller's own parse() gets the same object.
@@ -301,7 +328,11 @@ def _patch_pair(messages_cls, async_messages_cls):
     async def _patched_async_create(self, *args, **kwargs):
         start_ns = time.time_ns()
         request_json = _request_payload(kwargs)
-        response = await original_async_create(self, *args, **kwargs)
+        try:
+            response = await original_async_create(self, *args, **kwargs)
+        except Exception as exc:
+            _record_error(exc, start_ns, request_json)
+            raise
         parsed = response
         if _is_raw(response):
             try:

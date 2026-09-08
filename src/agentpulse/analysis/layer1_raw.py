@@ -98,7 +98,8 @@ def get_llm_call_meta(run_id: str, db_path: Path | None = None) -> list[dict]:
     conn = get_connection(db_path)
     rows = conn.execute(
         """SELECT call_id, span_id, call_index, start_time_ms, end_time_ms,
-                  input_tokens, output_tokens, model,
+                  input_tokens, output_tokens, model, error,
+                  cache_read_tokens, cache_creation_tokens,
                   LENGTH(request_json)  AS request_bytes,
                   LENGTH(response_json) AS response_bytes
            FROM llm_calls WHERE run_id = ?
@@ -113,7 +114,8 @@ def get_llm_call_payload(call_id: str, run_id: str,
     conn = get_connection(db_path)
     row = conn.execute(
         """SELECT request_json, response_json, model, input_tokens, output_tokens,
-                  start_time_ms, end_time_ms
+                  start_time_ms, end_time_ms, error,
+                  cache_read_tokens, cache_creation_tokens
            FROM llm_calls WHERE call_id = ? AND run_id = ?""",
         (call_id, run_id),
     ).fetchone()

@@ -44,7 +44,8 @@ def _request_payload(kwargs: dict) -> str:
 # ---------------------------------------------------------------------------
 def _record(start_ns: int, end_ns: int,
             input_tokens: int, output_tokens: int, model: str,
-            request_json: str = "", response_json: str = "") -> None:
+            request_json: str = "", response_json: str = "",
+            _cached: int = 0) -> None:
     """Push a finished LLM call into the active session's queue.
 
     Tags the call with the active agent (a ContextVar — per-asyncio-task).
@@ -61,6 +62,21 @@ def _record(start_ns: int, end_ns: int,
         request_json=request_json,
         response_json=response_json,
         agent=get_active_agent(),
+        cache_read_tokens=int(_cached or 0),
+    ))
+
+
+def _record_error(exc, start_ns: int, request_json: str) -> None:
+    """A failed API call still gets a record, so outages and retries show up."""
+    session = get_active_session()
+    if session is None:
+        return
+    session._pending_api_calls.append(LLMCallRecord(
+        start_ns=start_ns, end_ns=time.time_ns(),
+        input_tokens=0, output_tokens=0, model="",
+        request_json=request_json, response_json="",
+        agent=get_active_agent(),
+        error=f"{type(exc).__name__}: {str(exc)[:500]}",
     ))
 
 
@@ -84,6 +100,7 @@ def _record_from_response(start_ns: int, end_ns: int, response,
     usage = getattr(response, "usage", None)
     if usage is None:
         return
+    details = getattr(usage, "prompt_tokens_details", None)
     _record(
         start_ns, end_ns,
         getattr(usage, "prompt_tokens",     0),
@@ -91,6 +108,7 @@ def _record_from_response(start_ns: int, end_ns: int, response,
         getattr(response, "model", ""),
         request_json=request_json,
         response_json=_response_payload(response),
+        _cached=getattr(details, "cached_tokens", 0) if details else 0,
     )
 
 
@@ -320,7 +338,11 @@ def _patch_chat_async() -> None:
         start_ns = time.time_ns()
         kwargs = _force_usage(kwargs)
         request_json = _request_payload(kwargs)
-        response = await original(self, *args, **kwargs)
+        try:
+            response = await original(self, *args, **kwargs)
+        except Exception as exc:
+            _record_error(exc, start_ns, request_json)
+            raise
         return _wrap_async(response, start_ns, request_json)
 
     AsyncCompletions.create = _instrumented
@@ -337,7 +359,11 @@ def _patch_chat_sync() -> None:
         start_ns = time.time_ns()
         kwargs = _force_usage(kwargs)
         request_json = _request_payload(kwargs)
-        response = original(self, *args, **kwargs)
+        try:
+            response = original(self, *args, **kwargs)
+        except Exception as exc:
+            _record_error(exc, start_ns, request_json)
+            raise
         return _wrap_sync(response, start_ns, request_json)
 
     Completions.create = _instrumented
@@ -356,7 +382,11 @@ def _patch_legacy_async() -> None:
     async def _instrumented(self, *args, **kwargs):
         start_ns = time.time_ns()
         request_json = _request_payload(kwargs)
-        response = await original(self, *args, **kwargs)
+        try:
+            response = await original(self, *args, **kwargs)
+        except Exception as exc:
+            _record_error(exc, start_ns, request_json)
+            raise
         return _wrap_async(response, start_ns, request_json)
 
     AsyncCompletions.create = _instrumented
@@ -372,7 +402,11 @@ def _patch_legacy_sync() -> None:
     def _instrumented(self, *args, **kwargs):
         start_ns = time.time_ns()
         request_json = _request_payload(kwargs)
-        response = original(self, *args, **kwargs)
+        try:
+            response = original(self, *args, **kwargs)
+        except Exception as exc:
+            _record_error(exc, start_ns, request_json)
+            raise
         return _wrap_sync(response, start_ns, request_json)
 
     Completions.create = _instrumented

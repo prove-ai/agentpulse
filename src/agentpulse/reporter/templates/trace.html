@@ -108,8 +108,8 @@ TREE.forEach((span, si) => {
     const c = document.createElement('div');
     c.className = 'tnode child';
     if (ch.kind === 'llm') {
-      c.innerHTML = `<span class="tdot llm"></span><span class="nm">${esc(ch.label)}</span>` +
-        `<span class="meta">${fmtMs(ch.ms)} · ${fmtTok(ch.in, ch.out)}</span>`;
+      c.innerHTML = `<span class="tdot ${ch.err ? 'err' : 'llm'}"></span><span class="nm">${esc(ch.label)}</span>` +
+        `<span class="meta">${ch.err ? 'failed · ' : ''}${fmtMs(ch.ms)} · ${fmtTok(ch.in, ch.out)}</span>`;
     } else {
       c.innerHTML = `<span class="tdot ${ch.ok ? 'tool' : 'err'}"></span><span class="nm">🔧 ${esc(ch.label)}</span>` +
         `<span class="meta">${fmtMs(ch.ms)}${ch.ok ? '' : ' · failed'}</span>`;
@@ -185,12 +185,18 @@ async function render() {
 
   if (node.kind === 'llm') {
     const req = data.request || {}, resp = data.response || {};
-    html += header(span.agent + ' · LLM call', [
+    html += header(span.agent + (data.error ? ' · failed LLM call' : ' · LLM call'), [
       data.model, fmtMs(data.duration_ms), fmtTok(data.input_tokens || 0, data.output_tokens || 0) + ' tokens',
+      data.cache_read_tokens ? 'cache read ' + data.cache_read_tokens.toLocaleString() : null,
+      data.cache_creation_tokens ? 'cache write ' + data.cache_creation_tokens.toLocaleString() : null,
       req.max_tokens != null ? 'max_tokens ' + req.max_tokens : null,
       req.temperature != null ? 'temp ' + req.temperature : null,
       resp.stop_reason ? 'stop: ' + resp.stop_reason : null,
     ]);
+    if (data.error) {
+      html += `<div class="msg"><div class="msg-role" style="color:#c22f2f;">error</div>` +
+              `<div class="msg-body" style="color:#c22f2f;">${esc(data.error)}</div></div>`;
+    }
     if (rawMode) {
       html += msgBox('request', JSON.stringify(req, null, 2), 'system');
       html += msgBox('response', JSON.stringify(resp, null, 2), 'assistant');

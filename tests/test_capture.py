@@ -197,3 +197,73 @@ def test_text_from_outputs_shapes():
         {"verdict": {"suspect": "butler"}}
     # Never raises.
     assert _text_from_outputs(None) == ""
+
+
+def test_failed_call_recorded():
+    """An API exception still produces a record with the error message."""
+    from agentpulse.sdk.patches.anthropic import _patch_pair
+
+    class Messages:
+        def create(self, **kwargs):
+            raise RuntimeError("overloaded_error: try again later")
+
+    class AsyncMessages:
+        async def create(self, **kwargs):
+            raise RuntimeError("boom")
+
+    _patch_pair(Messages, AsyncMessages)
+    session = _session()
+    try:
+        try:
+            Messages().create(model="m", messages=[])
+            assert False, "exception must propagate"
+        except RuntimeError:
+            pass
+        assert len(session._pending_api_calls) == 1
+        rec = session._pending_api_calls[0]
+        assert rec.error.startswith("RuntimeError: overloaded_error")
+        assert rec.request_json  # the request is still captured
+    finally:
+        clear_active_session()
+
+
+def test_cache_tokens_captured():
+    """Anthropic cache usage fields land on the record (parsed + stream)."""
+    msgs, _ = _make_patched_pair()
+    session = _session()
+    try:
+        message = _fake_message()
+        message.usage = NS(input_tokens=11, output_tokens=7,
+                           cache_read_input_tokens=900, cache_creation_input_tokens=50)
+        msgs.create(model="m", _resp=APIResponse(message))
+        rec = session._pending_api_calls[0]
+        assert (rec.cache_read_tokens, rec.cache_creation_tokens) == (900, 50)
+    finally:
+        clear_active_session()
+
+    # Stream path: cache usage arrives on message_start.
+    from agentpulse.sdk.patches.anthropic import _RecordingStream
+    events = _fake_events()
+    events[0].message.usage = NS(input_tokens=120, cache_read_input_tokens=777,
+                                 cache_creation_input_tokens=33)
+    session = _session()
+    try:
+        list(_RecordingStream(iter(events), start_ns=1, request_json="{}"))
+        rec = session._pending_api_calls[0]
+        assert (rec.cache_read_tokens, rec.cache_creation_tokens) == (777, 33)
+    finally:
+        clear_active_session()
+
+
+def test_cache_aware_cost():
+    from agentpulse.storage.sqlite_store import compute_cost, model_price
+    inp_p, out_p = model_price("claude-sonnet-4-6")
+    base = compute_cost(1000, 100, "claude-sonnet-4-6")
+    with_cache = compute_cost(1000, 100, "claude-sonnet-4-6",
+                              cache_read_tokens=10_000, cache_creation_tokens=2_000)
+    expected_extra = (10_000 * inp_p * 0.1 + 2_000 * inp_p * 1.25) / 1_000_000
+    assert abs((with_cache - base) - expected_extra) < 1e-9
+    # OpenAI: cached tokens are inside input_tokens, billed at half price.
+    gpt_base = compute_cost(1000, 100, "gpt-4o")
+    gpt_cached = compute_cost(1000, 100, "gpt-4o", cache_read_tokens=800)
+    assert gpt_cached < gpt_base

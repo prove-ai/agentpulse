@@ -380,13 +380,16 @@ class _ObservabilityCallback:
             def on_chain_error(self, error, *, run_id, parent_run_id=None, **kwargs):
                 session = get_active_session()
                 agent_name = self._open_turns.pop(run_id, None)
+                err_text = f"{type(error).__name__}: {str(error)[:500]}"
                 if session is not None and agent_name:
                     if session._current_turn is not None and session._current_turn.agent_name == agent_name:
                         session._current_turn.status = "ERROR"
-                    session.on_turn_end(agent_name)
+                    # The failed turn has no output; keep the error message
+                    # there so the run page shows WHY, not just that it broke.
+                    session.on_turn_end(agent_name, output_text=f"ERROR — {err_text}")
 
                 if run_id == self._root_run_id and session is not None:
-                    session.on_termination(f"chain_error: {type(error).__name__}")
+                    session.on_termination(f"chain_error: {err_text}")
                     session.finalise()
                     try:
                         write_session(session)

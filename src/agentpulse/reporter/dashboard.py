@@ -3412,9 +3412,11 @@ def run_trace(run_id_prefix: str):
             dur = (c.get("end_time_ms") or 0) - (c.get("start_time_ms") or 0)
             children.append({
                 "kind": "llm", "id": c["call_id"],
-                "label": c.get("model") or "LLM call",
+                "label": c.get("model") or ("failed call" if c.get("error") else "LLM call"),
                 "in": c.get("input_tokens") or 0, "out": c.get("output_tokens") or 0,
                 "ms": round(dur), "start": c.get("start_time_ms") or 0,
+                "err": bool(c.get("error")),
+                "cached": c.get("cache_read_tokens") or 0,
             })
         for t in tools_by_span.get(sid, []):
             children.append({
@@ -3464,6 +3466,9 @@ def api_trace_llm(run_id: str, call_id: str):
         "model": row.get("model"),
         "input_tokens": row.get("input_tokens"),
         "output_tokens": row.get("output_tokens"),
+        "cache_read_tokens": row.get("cache_read_tokens") or 0,
+        "cache_creation_tokens": row.get("cache_creation_tokens") or 0,
+        "error": row.get("error") or "",
         "duration_ms": round((row.get("end_time_ms") or 0) - (row.get("start_time_ms") or 0)),
     })
 

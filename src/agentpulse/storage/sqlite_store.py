@@ -212,6 +212,9 @@ _MIGRATIONS = [
     "ALTER TABLE tool_calls ADD COLUMN result_json    TEXT",
     "ALTER TABLE tool_calls ADD COLUMN start_time_ms  REAL",
     "ALTER TABLE handoffs   ADD COLUMN payload_text   TEXT",
+    "ALTER TABLE llm_calls  ADD COLUMN cache_read_tokens     INTEGER DEFAULT 0",
+    "ALTER TABLE llm_calls  ADD COLUMN cache_creation_tokens INTEGER DEFAULT 0",
+    "ALTER TABLE llm_calls  ADD COLUMN error          TEXT DEFAULT ''",
 ]
 
 
@@ -268,9 +271,24 @@ def model_price(model: str) -> tuple[float, float]:
     return _DEFAULT_PRICE
 
 
-def compute_cost(input_tokens: int, output_tokens: int, model: str) -> float:
+def compute_cost(input_tokens: int, output_tokens: int, model: str,
+                 cache_read_tokens: int = 0,
+                 cache_creation_tokens: int = 0) -> float:
+    """Cost in USD. Cache semantics differ by provider:
+    - Anthropic: cache tokens are NOT in input_tokens; reads bill at 0.1x the
+      input price, cache writes at 1.25x.
+    - OpenAI: cached tokens ARE a subset of input (prompt) tokens, billed at
+      half price, so they show up here as a discount.
+    """
     inp_p, out_p = model_price(model)
-    return (input_tokens * inp_p + output_tokens * out_p) / 1_000_000
+    cost = (input_tokens * inp_p + output_tokens * out_p) / 1_000_000
+    if cache_read_tokens or cache_creation_tokens:
+        if (model or "").startswith("claude"):
+            cost += (cache_read_tokens * inp_p * 0.1 +
+                     cache_creation_tokens * inp_p * 1.25) / 1_000_000
+        else:
+            cost -= (cache_read_tokens * inp_p * 0.5) / 1_000_000
+    return max(cost, 0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -469,11 +487,20 @@ def write_session(
     total_input  = sum(t.input_tokens  for t in session.turns)
     total_output = sum(t.output_tokens for t in session.turns)
 
-    # Use per-turn model for cost (more accurate when model varies)
-    total_cost = sum(
-        compute_cost(t.input_tokens, t.output_tokens, t.model or session.model)
-        for t in session.turns
-    )
+    # Use per-turn model for cost (more accurate when model varies). Cache
+    # tokens are summed from the turn's attached LLM-call records.
+    def _turn_cache(t):
+        calls = getattr(t, "llm_calls", []) or []
+        return (sum(getattr(c, "cache_read_tokens", 0) or 0 for c in calls),
+                sum(getattr(c, "cache_creation_tokens", 0) or 0 for c in calls))
+
+    total_cost = 0.0
+    for t in session.turns:
+        cr, cc = _turn_cache(t)
+        total_cost += compute_cost(t.input_tokens, t.output_tokens,
+                                   t.model or session.model,
+                                   cache_read_tokens=cr,
+                                   cache_creation_tokens=cc)
 
     # ---- per-run config snapshot (for change tracking & versioning) ----
     agent_cfg = dict(getattr(session, "agent_configs", {}) or {})
@@ -591,8 +618,9 @@ def write_session(
                 INSERT OR REPLACE INTO llm_calls
                   (call_id, span_id, run_id, call_index, start_time_ms,
                    end_time_ms, input_tokens, output_tokens, model,
-                   request_json, response_json)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                   request_json, response_json,
+                   cache_read_tokens, cache_creation_tokens, error)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     f"{span_id}:{ci}", span_id, session.run_id, ci,
@@ -600,6 +628,9 @@ def write_session(
                     call.end_ns / 1_000_000,
                     call.input_tokens, call.output_tokens, call.model,
                     call.request_json, call.response_json,
+                    getattr(call, "cache_read_tokens", 0) or 0,
+                    getattr(call, "cache_creation_tokens", 0) or 0,
+                    getattr(call, "error", "") or "",
                 ),
             )
 
