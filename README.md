@@ -74,7 +74,7 @@ Even if you never run AgentPulse, these design decisions carry over to any in-ho
 ### Step 1: install
 
 ```bash
-pip install git+https://github.com/prove-ai/agentpulse.git
+pip install proveai-agentpulse
 ```
 
 To try the dashboard with the bundled sample project first (a 4-agent content pipeline with 120 runs across 4 prompt versions and one real drift), clone the repo and point AgentPulse at its data:
@@ -193,7 +193,7 @@ There is also `agentpulse report`, a per-run metrics report for a single project
 
 ## MCP server: let Claude run the investigation
 
-`agentpulse mcp` (install with `pip install "agentpulse[mcp] @ git+https://github.com/prove-ai/agentpulse.git"`) exposes the drift engine to Claude Code and Claude Desktop as three tools:
+`agentpulse mcp` (install with `pip install "proveai-agentpulse[mcp]"`) exposes the drift engine to Claude Code and Claude Desktop as three tools:
 
 | Tool | What it returns |
 |---|---|
@@ -310,7 +310,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the snapshot-test workflow and guidel
 ## Requirements
 
 - Python 3.10+
-- Optional extras: `agentpulse[mcp]` (MCP server), `agentpulse[ai]` (AI next-check suggestions), `agentpulse[otel]` (OTel export), `agentpulse[all]`
+- Optional extras: `proveai-agentpulse[mcp]` (MCP server), `proveai-agentpulse[ai]` (AI next-check suggestions), `proveai-agentpulse[otel]` (OTel export), `proveai-agentpulse[all]`
 - The multi-agent system you observe needs `openai` and/or `anthropic` installed in **its** environment. AgentPulse patches whichever it finds; neither is a hard dependency of AgentPulse itself.
 
 ## License

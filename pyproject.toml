@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "prove-agentpulse"
+name = "proveai-agentpulse"
 version = "0.1.0"
 description = "Observability and drift detection for multi-agent systems (AutoGen, LangChain/LangGraph)"
 readme = "README.md"
@@ -22,7 +22,7 @@ ai = ["anthropic>=0.40"]
 mcp = ["mcp>=1.0"]
 # OTel exporters (scripts/otel_export.py)
 otel = ["opentelemetry-sdk>=1.24", "opentelemetry-api>=1.24"]
-all = ["agentpulse[ai,mcp,otel]"]
+all = ["proveai-agentpulse[ai,mcp,otel]"]
 
 # NOTE: openai / anthropic SDKs are NOT dependencies. instrument() patches
 # whichever is already installed in the system being observed.
