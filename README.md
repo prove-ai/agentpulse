@@ -77,16 +77,7 @@ Even if you never run AgentPulse, these design decisions carry over to any in-ho
 pip install proveai-agentpulse
 ```
 
-To try the dashboard with the bundled sample project first (a 4-agent content pipeline with 120 runs across 4 prompt versions and one real drift), clone the repo and point AgentPulse at its data:
-
-```bash
-git clone https://github.com/prove-ai/agentpulse.git
-AGENTPULSE_HOME=./agentpulse agentpulse dashboard
-```
-
-Open <http://localhost:5001>. The Drift Investigation view above is the first thing you can reproduce.
-
-### Step 2: capture your own system
+### Step 2: capture your runs
 
 Run your app with this command:
 
@@ -94,13 +85,32 @@ Run your app with this command:
 agentpulse run python main.py
 ```
 
-If your system runs on a supported framework (see the table below), that is the whole integration. Every LLM call, agent turn, tool call, and handoff is captured into `~/.agentpulse/db/runs.db`. Then run `agentpulse dashboard` and your project appears in the sidebar picker. Your data stays on your machine, as plain SQLite files in your home directory.
+If your system runs on a supported framework (see the table below), that is the whole integration. Every LLM call, agent turn, tool call, and handoff is captured into `~/.agentpulse/db/runs.db`. Your data stays on your machine, as plain SQLite files in your home directory.
 
 To monitor several systems side by side, give each its own database:
 
 ```bash
 AGENTPULSE_DB=my-system agentpulse run python main.py
 ```
+
+### Step 3: open the dashboard
+
+```bash
+agentpulse dashboard
+```
+
+Open <http://localhost:5001>. Your project appears in the sidebar picker.
+
+### Optional: explore the bundled sample project
+
+The repo ships a sample project: a 4-agent content pipeline with 120 runs across 4 prompt versions and one real drift. To browse it before capturing your own runs, clone the repo and point AgentPulse at its data:
+
+```bash
+git clone https://github.com/prove-ai/agentpulse.git
+AGENTPULSE_HOME=./agentpulse agentpulse dashboard
+```
+
+The Drift Investigation view above is the first thing you can reproduce.
 
 ### Framework support
 
