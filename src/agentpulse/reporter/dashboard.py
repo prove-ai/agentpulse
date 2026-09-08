@@ -1771,9 +1771,9 @@ def switch_db(name: str):
     from flask import make_response, redirect, url_for, request
     safe = "".join(c for c in name if c.isalnum() or c in ("-", "_")) or DEFAULT_DB
     nxt = request.args.get("next", "index")
-    _routes = {"trends": "trends", "drift2": "drift_investigation_2",
-               "metrics": "drift_investigation_2",        # legacy alias → Drift Investigation
-               "timeline": "timeline_view",
+    _routes = {"trends": "trends", "drift": "drift_investigation",
+               "drift2": "drift_investigation",           # legacy alias
+               "metrics": "drift_investigation",          # legacy alias
                "explore": "explore", "overview": "overview", "changelog": "changelog"}
     target = url_for(_routes[nxt]) if nxt in _routes else url_for("index")
     resp = make_response(redirect(target))
@@ -2744,7 +2744,7 @@ def overview():
             args.pop("range", None)
             args["start"], args["end"] = all_ts[0][:10], all_ts[-1][:10]
             ctx = _browse_context(args, _band_cfg())
-    # Same engine AND same default comparison as Drift Investigation (/drift2):
+    # Same engine AND same default comparison as Drift Investigation (/drift):
     # baseline version vs every later version, so the summary and the tab agree.
     runs = sorted([r for r in list_runs(limit=1000)
                    if ctx["lo"] <= r.get("timestamp", "") <= ctx["hi"]
@@ -2875,7 +2875,7 @@ def _attach_routes(runs):
 def _build_investigations(runs, sort="sev_desc", cfg_override=None):
     """Request-free core of the unified drift engine: run investigate() on `runs`
     and return the ranked investigations (likely-cause chains + tiered component
-    findings) plus the series + change log. Shared by /drift2, /drift2/next-checks,
+    findings) plus the series + change log. Shared by /drift, /drift/next-checks,
     and the Overview summary so every surface agrees on what 'drift' means.
     `cfg_override` tweaks the drift config (e.g. baseline_runs/recent_runs for a
     version comparison: whole From version vs whole To version)."""
@@ -3024,7 +3024,7 @@ def investigations_for(*, start=None, end=None, range_param="30d", task_type="",
     """Request-free core of the Drift Investigation loader: parse the range, load
     and filter the real-timeline runs, apply optional version cohorting, run
     investigate(), and rank the investigations (likely-cause chains + tiered
-    component findings). Shared by /drift2 (via _drift2_investigations) and the
+    component findings). Shared by /drift (via _drift_investigations) and the
     AgentPulse MCP server so every surface agrees on what 'drift' means.
     Returns (investigations, ctx)."""
     import datetime as _dt
@@ -3126,7 +3126,7 @@ def investigations_for(*, start=None, end=None, range_param="30d", task_type="",
     return investigations, ctx
 
 
-def _drift2_investigations(args):
+def _drift_investigations(args):
     """Flask wrapper: pull params off request.args and delegate to investigations_for."""
     return investigations_for(
         start=args.get("start"), end=args.get("end"),
@@ -3137,12 +3137,20 @@ def _drift2_investigations(args):
 
 
 @app.route("/drift2")
-def drift_investigation_2():
+def drift_investigation_legacy():
+    """Old URL for Drift Investigation. Redirects to /drift."""
+    from flask import redirect
+    qs = request.query_string.decode()
+    return redirect("/drift" + ("?" + qs if qs else ""), code=301)
+
+
+@app.route("/drift")
+def drift_investigation():
     """Drift Investigation — tiered + causal engine in a 3-column shell. Runs
     on the real run timeline (no version-compare reindex, which breaks the causal
     walk); the Version pill scopes the analysis to a single version."""
     import statistics
-    investigations, ctx = _drift2_investigations(request.args)
+    investigations, ctx = _drift_investigations(request.args)
     series, band_cfg = ctx["series"], ctx["band_cfg"]
     sel = next((x for x in investigations if x["id"] == request.args.get("sel")), None)
     if not sel and request.args.get("finding"):       # deep-link from Event Timeline (cat|entity)
@@ -3311,7 +3319,7 @@ def drift_investigation_2():
     events_tl.sort(key=lambda x: x["run"])              # chronological (oldest → newest)
 
     return render_template(
-        "drift2.html", investigations=investigations, sel=sel,
+        "drift.html", investigations=investigations, sel=sel,
         charts_json=json.dumps(charts), markers_json=json.dumps(ctx["markers"]),
         path_graphs_json=json.dumps(path_graphs), route_variants=route_variants,
         timeline=timeline, related_changes=related_changes, events_tl=events_tl,
@@ -3326,11 +3334,11 @@ def drift_investigation_2():
         sort=ctx["sort"])
 
 
-@app.route("/drift2/next-checks")
-def drift2_next_checks():
-    """On-demand LLM 'Next check' suggestions for the selected drift2 finding."""
+@app.route("/drift/next-checks")
+def drift_next_checks():
+    """On-demand LLM 'Next check' suggestions for the selected drift finding."""
     from agentpulse.analysis.diagnose import suggest_next_checks
-    investigations, _ = _drift2_investigations(request.args)
+    investigations, _ = _drift_investigations(request.args)
     sel = next((x for x in investigations if x["id"] == request.args.get("sel")), None) \
         or (investigations[0] if investigations else None)
     if not sel:
@@ -3359,60 +3367,6 @@ def drift2_next_checks():
         return jsonify({"ok": False,
                         "text": f"AI suggestion unavailable ({e.__class__.__name__}: {detail[:200]})."})
 
-
-@app.route("/timeline")
-def timeline_view():
-    """Event timeline — config changes over time. When reached from a red metric
-    (scope + around), highlight the changes near the drift-start that touch the
-    same workflow area (potentially related — never a confirmed cause)."""
-    import datetime as _dt
-    from agentpulse.analysis.changes import build_change_log
-
-    days = int(request.args.get("days", 365))
-    scope = request.args.get("scope")          # agent name or "A → B"
-    around = request.args.get("around")        # run index of the drift start
-    cutoff = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=days)
-    runs = [r for r in list_runs(limit=500) if r.get("timestamp", "") >= cutoff.isoformat()]
-    runs.sort(key=lambda r: r.get("timestamp", ""))
-
-    events = build_change_log(runs)
-    has_config = any(r.get("config_json") for r in runs)
-
-    # Version snapshots = "big" events that are always visible on the line.
-    big_events = []
-    for v in get_versions():
-        for i, r in enumerate(runs):
-            if r.get("timestamp", "") >= (v["created_at"] or ""):
-                big_events.append({"x": i, "label": f"v{v['version_num']}",
-                                   "detail": f"Version {v['version_num']} snapshot"})
-                break
-
-    # Plot points: one per change event (hover for detail; workflow changes are bigger).
-    pts = [{"x": e["run_index"], "ts": _fmt_et(e.get("timestamp", "")), "scope": e["scope"],
-            "dimension": e["dimension"], "old": str(e["old"]), "new": str(e["new"]),
-            "big": e["dimension"] == "workflow"} for e in events]
-
-    anchor = None
-    scoped = None
-    if scope and around not in (None, "", "None"):
-        try:
-            anchor = int(around)
-        except ValueError:
-            anchor = None
-        names = {p.strip() for p in scope.replace("→", "|").split("|") if p.strip()}
-        rel = [e for e in events
-               if (anchor is None or (anchor - 20) <= e["run_index"] <= anchor)
-               and (e["scope"] == "workflow" or e["scope"] in names)]
-        scoped = {"scope": scope, "anchor": anchor, "events": list(reversed(rel))}
-
-    return render_template(
-        "timeline.html",
-        events=list(reversed(events)), scoped=scoped, anchor=anchor,
-        has_config=has_config, days=days, run_count=len(runs),
-        points_json=json.dumps(pts), big_json=json.dumps(big_events),
-        x_min=(anchor - 20) if anchor is not None else None,
-        x_max=(anchor + 2) if anchor is not None else None,
-    )
 
 
 @app.route("/run/<run_id>/delete", methods=["POST"])

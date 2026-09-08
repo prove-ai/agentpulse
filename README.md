@@ -143,7 +143,7 @@ No API keys are needed to capture data or browse the dashboard; it only reads SQ
 
 ## The dashboard
 
-### Drift Investigation (`/drift2`)
+### Drift Investigation (`/drift`)
 The core view, shown at the top of this README: findings ranked by severity, the causal path, what changed, why it matters, potentially related changes, and suggested next checks.
 
 ### Run explorer (`/`)
@@ -156,7 +156,7 @@ Chart any metric for any agent, handoff, or the whole system across runs, with t
 
 ![Metrics Explorer](docs/screenshots/light/metrics-explorer.png)
 
-There is also a trend view (`/trends`) with agent health cards and a handoff health leaderboard, and an event timeline (`/timeline`) of prompt, model, and tool changes.
+There is also a trend view (`/trends`) with agent health cards and a handoff health leaderboard, and an event timeline (`/changelog`) of prompt, model, and tool changes.
 
 ---
 

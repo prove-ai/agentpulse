@@ -181,7 +181,7 @@
     <div class="di-pop ts-pop">
       <div class="ts-search"><input placeholder='Search or type "25m"' onkeydown="tsSearch(event)"></div>
       {% for key,label,_ in ranges %}
-      <a class="ts-opt {{ 'active' if key==active_range else '' }}" href="/drift2?range={{ key }}{{ qs }}">{{ label }}</a>
+      <a class="ts-opt {{ 'active' if key==active_range else '' }}" href="/drift?range={{ key }}{{ qs }}">{{ label }}</a>
       {% endfor %}
       <div class="ts-cal-toggle" onclick="document.getElementById('tsCal').classList.toggle('show')">Pick from a calendar</div>
       <div class="ts-cal {{ 'show' if start and end else '' }}" id="tsCal">
@@ -218,7 +218,7 @@
       </div></div>
       <div class="ver-actions">
         <button class="btn btn-sm btn-primary" type="submit">Apply</button>
-        <a class="ver-all" href="/drift2?range={{ rp }}&compared=1&base={{ from_v }}{% for n in ver_options %}{% if n != from_v %}&to={{ n }}{% endif %}{% endfor %}{% if start %}&start={{ start }}&end={{ end }}{% endif %}{% if task_type %}&task_type={{ task_type }}{% endif %}{% if request.args.get('db') %}&db={{ request.args.get('db') }}{% endif %}">Compare all</a>
+        <a class="ver-all" href="/drift?range={{ rp }}&compared=1&base={{ from_v }}{% for n in ver_options %}{% if n != from_v %}&to={{ n }}{% endif %}{% endfor %}{% if start %}&start={{ start }}&end={{ end }}{% endif %}{% if task_type %}&task_type={{ task_type }}{% endif %}{% if request.args.get('db') %}&db={{ request.args.get('db') }}{% endif %}">Compare all</a>
       </div>
     </div>
   </details>
@@ -232,7 +232,7 @@
       <div class="panel-h d2-findings-h">
         <span>Findings <span class="text-muted small">· {{ investigations|length }}</span></span>
         <a class="d2-sort" title="Toggle sort direction"
-           href="/drift2?range={{ rp }}&sort={{ 'sev_asc' if sort=='sev_desc' else 'sev_desc' }}{% if start %}&start={{ start }}&end={{ end }}{% endif %}{% if task_type %}&task_type={{ task_type }}{% endif %}&compared=1&base={{ from_v }}{% for n in to_vs %}&to={{ n }}{% endfor %}{% if request.args.get('db') %}&db={{ request.args.get('db') }}{% endif %}{% if sel %}&sel={{ sel.id }}{% endif %}">
+           href="/drift?range={{ rp }}&sort={{ 'sev_asc' if sort=='sev_desc' else 'sev_desc' }}{% if start %}&start={{ start }}&end={{ end }}{% endif %}{% if task_type %}&task_type={{ task_type }}{% endif %}&compared=1&base={{ from_v }}{% for n in to_vs %}&to={{ n }}{% endfor %}{% if request.args.get('db') %}&db={{ request.args.get('db') }}{% endif %}{% if sel %}&sel={{ sel.id }}{% endif %}">
           Sort: Severity <span class="d2-arr">{{ '↓' if sort=='sev_desc' else '↑' }}</span>
         </a>
       </div>
@@ -240,7 +240,7 @@
         {% set primary = investigations|selectattr('severity','in',['high','drift'])|list %}
         {% set secondary = investigations|rejectattr('severity','in',['high','drift'])|list %}
         {% macro inv_card(x) %}
-        <a class="inv {{ 'active' if sel and x.id==sel.id else '' }}" href="/drift2?sel={{ x.id }}&range={{ rp }}{% if start %}&start={{ start }}&end={{ end }}{% endif %}{{ qs }}">
+        <a class="inv {{ 'active' if sel and x.id==sel.id else '' }}" href="/drift?sel={{ x.id }}&range={{ rp }}{% if start %}&start={{ start }}&end={{ end }}{% endif %}{{ qs }}">
           <div class="inv-name">{{ x.title }}</div>
           <div class="inv-sub">{{ x.kind_label }} · since run {{ x.drift_start }}</div>
           {% if x.metrics %}<div class="inv-metrics">{% for m in x.metrics %}<span class="inv-m">{{ m.name }}{% if m.dir=='up' %}<span class="inv-arr up">↑</span>{% elif m.dir=='down' %}<span class="inv-arr dn">↓</span>{% endif %}</span>{% endfor %}</div>{% endif %}
@@ -379,7 +379,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script>
   function tsSearch(e){ if(e.key==='Enter'){ const v=(e.target.value||'').trim().toLowerCase();
-    if(/^\d+(m|h|d)$/.test(v)){ e.preventDefault(); location='/drift2?range='+v; } } }
+    if(/^\d+(m|h|d)$/.test(v)){ e.preventDefault(); location='/drift?range='+v; } } }
 
   const CHARTS = {{ charts_json|safe }};
   const MARKERS = {{ markers_json|safe }};
@@ -460,7 +460,7 @@
     const lbl = btn.querySelector('.ai-cta-label') || btn;
     btn.disabled = true; lbl.textContent = 'Generating…';
     out.style.display = 'block'; out.className = 'd2-ai-out muted'; out.textContent = 'Asking the model…';
-    fetch('/drift2/next-checks' + window.location.search)
+    fetch('/drift/next-checks' + window.location.search)
       .then(r => r.json())
       .then(d => {
         if (d.ok) {

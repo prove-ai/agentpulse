@@ -114,7 +114,7 @@ def _causal_explanation(x):
 
 def _finding_from_investigation(x, runs, project):
     """Reshape one ranked investigation into a root-cause-led finding card that
-    mirrors the /drift2 detail panel: WHICH component drifted + WHY we concluded it,
+    mirrors the /drift detail panel: WHICH component drifted + WHY we concluded it,
     with the moved metrics as supporting detail (not the headline)."""
     card = x.get("card") or {}
     since_ts, days = _active_since(x.get("drift_start"), runs)

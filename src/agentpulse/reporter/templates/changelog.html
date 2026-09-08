@@ -81,7 +81,7 @@
 
 {% set fqs %}{% if component %}&component={{ component }}{% endif %}{% if version_f %}&version={{ version_f }}{% endif %}{% if rng %}&range={{ rng }}{% endif %}{% if request.args.get('db') %}&db={{ request.args.get('db') }}{% endif %}{% endset %}
 
-<a class="et-back" href="/switch-db/{{ current_db }}?next=drift2">← Back to Drift Investigation</a>
+<a class="et-back" href="/switch-db/{{ current_db }}?next=drift">← Back to Drift Investigation</a>
 <div class="et-title">Event Timeline</div>
 <div class="et-sub">Track every config change, version snapshot, and drift-related event across your agent workflows.</div>
 
@@ -141,7 +141,7 @@
         <div><div class="k">Event type</div><div class="v">{{ selected.type_label }}</div></div>
         <div><div class="k">Affected component</div><div class="v">{{ selected.component_label or '—' }}</div>{% if selected.component_role %}<div class="croleta">{{ selected.component_role }}</div>{% endif %}</div>
         <div><div class="k">First seen</div><div class="v">{% if selected.run_index < 100000 %}Run {{ selected.run_index }} · {% endif %}{{ selected.ts|et('%Y-%m-%d') if selected.ts else '—' }}</div></div>
-        <div><div class="k">Related drift</div><div class="v">{% if selected.related_drift %}<a href="/drift2?finding={{ selected.related_drift }}{% if request.args.get('db') %}&db={{ request.args.get('db') }}{% endif %}" title="Open this finding in Drift Investigation">{{ selected.component_label }}</a>{% else %}—{% endif %}</div></div>
+        <div><div class="k">Related drift</div><div class="v">{% if selected.related_drift %}<a href="/drift?finding={{ selected.related_drift }}{% if request.args.get('db') %}&db={{ request.args.get('db') }}{% endif %}" title="Open this finding in Drift Investigation">{{ selected.component_label }}</a>{% else %}—{% endif %}</div></div>
       </div>
 
       {% if selected.before or selected.after %}
