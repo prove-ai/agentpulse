@@ -44,6 +44,8 @@ def run(argv: list[str]) -> int:
             return 2
         module, prog_args = args[1], args[2:]
         sys.argv = [module] + prog_args
+        # Mirror `python -m`: the current directory leads sys.path.
+        sys.path.insert(0, os.getcwd())
         runpy.run_module(module, run_name="__main__", alter_sys=True)
         return 0
 
