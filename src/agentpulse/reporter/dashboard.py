@@ -21,7 +21,7 @@ load_env_file()  # e.g. ANTHROPIC_API_KEY from <AGENTPULSE_HOME>/.env
 
 from flask import Flask, render_template, jsonify, abort, request, g
 
-from agentpulse.analysis.layer1_raw import list_runs, get_run, get_agent_spans, get_tool_calls, get_baseline_runs, get_handoffs
+from agentpulse.analysis.layer1_raw import list_runs, get_agent_spans, get_tool_calls, get_baseline_runs, get_handoffs
 from agentpulse.analysis.run_metrics import compute_all, is_clean_termination
 from agentpulse.analysis.run_anomaly import build_anomaly_report
 from agentpulse.analysis.run_insights import (
@@ -873,7 +873,6 @@ def compute_agent_drift(early_runs: list[dict], recent_runs: list[dict]) -> dict
     from agentpulse.analysis.drift_config import load_drift_config, rule_fires
 
     cfg = load_drift_config()
-    agent_rules = cfg.get("agent_rules", {}) or {}
     status_cfg = cfg.get("agent_status", {}) or {}
     # Agent-specific occurrence guard (defaults to 2), independent of the
     # stricter handoff guard so individual agents aren't over-filtered.
@@ -882,7 +881,6 @@ def compute_agent_drift(early_runs: list[dict], recent_runs: list[dict]) -> dict
         cfg.get("guards", {}).get("min_occurrences_per_half", 3),
     )
     info_min     = status_cfg.get("info_min_occurrences", 2)
-    drifting_min = status_cfg.get("drifting_min_rules", 2)
 
     early_by  = _collect_agent_occurrences(early_runs)
     recent_by = _collect_agent_occurrences(recent_runs)
@@ -2583,26 +2581,6 @@ def threshold_set():
 
 _DIM_LABEL = {"model": "Model", "prompt": "Prompt", "tools": "Tools",
               "params": "Parameters", "workflow": "Workflow"}
-
-
-def _fmt_change(e):
-    """Turn a raw change-log entry into a display event with an exact before→after."""
-    dim, old, new = e["dimension"], e["old"], e["new"]
-    if dim == "prompt":
-        detail = "System prompt content changed"          # only a hash is captured, not the text
-    elif dim == "tools":
-        os_, ns = set(old or ()), set(new or ())
-        parts = [f"+ {t}" for t in sorted(ns - os_)] + [f"− {t}" for t in sorted(os_ - ns)]
-        detail = ", ".join(parts) if parts else f"{list(old or [])} → {list(new or [])}"
-    elif dim == "params":
-        detail = " · ".join(f"{k}: {old.get(k)} → {new.get(k)}"
-                            for k in (set(old or {}) | set(new or {}))
-                            if (old or {}).get(k) != (new or {}).get(k)) \
-            if isinstance(old, dict) and isinstance(new, dict) else f"{old} → {new}"
-    else:
-        detail = f"{old} → {new}"
-    return {"dim": dim, "dim_label": _DIM_LABEL.get(dim, dim.title()), "scope": e["scope"],
-            "detail": detail, "ts": e.get("timestamp", ""), "run_index": e["run_index"]}
 
 
 _EVTYPE = {"config_change": "Config change", "version": "Version snapshot", "release": "Release event",

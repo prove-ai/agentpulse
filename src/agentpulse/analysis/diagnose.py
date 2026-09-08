@@ -32,46 +32,6 @@ SYSTEM = (
 )
 
 
-def build_context(runs: list[dict], series: dict, finding: dict, band_cfg: dict,
-                  findings: list[dict]) -> dict:
-    """Compact, high-signal evidence packet for one finding."""
-    cat, entity = finding["category"], finding["entity"]
-    br = band_cfg["baseline_runs"]
-    ent = series.get(cat, {}).get(entity, {})
-
-    drifted, stable = [], []
-    for metric, pts in ent.items():
-        band = control_band([p["y"] for p in pts], **band_cfg)
-        imp = metric_impact(pts, br)
-        if band.get("drifting"):
-            drifted.append({"metric": metric, "change": imp["label"],
-                            "baseline": imp["baseline"], "recent": imp["recent"]})
-        else:
-            stable.append(metric)
-
-    changes = [{"run": e["run_index"],
-                "what": f"{e['dimension']} changed"
-                        + ("" if e["scope"] == "workflow" else f" ({e['scope']})"),
-                "detail": f"{e['old']} -> {e['new']}"} for e in build_change_log(runs)]
-    ds = finding["drift_start"]
-    before = [c for c in changes if c["run"] <= ds][-4:]
-    after = [c for c in changes if c["run"] > ds][:2]
-
-    others = [f"{f['entity']} ({f['risk']}): {', '.join(f['metrics'])} @ run {f['drift_start']}"
-              for f in findings if f"{f['category']}|{f['entity']}" !=
-              f"{cat}|{entity}"]
-
-    return {
-        "drifted_entity": entity, "kind": cat, "risk": finding["risk"],
-        "drift_started_at_run": ds,
-        "drifted_metrics": drifted,
-        "stable_metrics": stable,
-        "config_changes_at_or_before_drift": before,
-        "config_changes_just_after_drift": after,
-        "other_drifts_in_system": others,
-    }
-
-
 def suggest_next_checks(context: dict) -> str:
     """Call Claude for a short triage suggestion. Raises on SDK/auth errors so the
     route can surface a friendly message."""

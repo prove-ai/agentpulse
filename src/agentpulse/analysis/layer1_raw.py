@@ -16,12 +16,6 @@ from pathlib import Path
 from agentpulse.storage.sqlite_store import get_connection
 
 
-def get_run(run_id: str, db_path: Path | None = None) -> dict | None:
-    conn = get_connection(db_path)
-    row = conn.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
-    return dict(row) if row else None
-
-
 def get_runs_by_version(prompt_version: int, db_path: Path | None = None) -> list[dict]:
     conn = get_connection(db_path)
     rows = conn.execute(
@@ -38,15 +32,6 @@ def get_baseline_runs(db_path: Path | None = None) -> list[dict]:
     if not row or row["v"] is None:
         return []
     return get_runs_by_version(row["v"], db_path)
-
-
-def get_spans(run_id: str, db_path: Path | None = None) -> list[dict]:
-    conn = get_connection(db_path)
-    rows = conn.execute(
-        "SELECT * FROM spans WHERE run_id = ? ORDER BY turn_index, start_time_ms",
-        (run_id,),
-    ).fetchall()
-    return [dict(r) for r in rows]
 
 
 def get_agent_spans(run_id: str, db_path: Path | None = None) -> list[dict]:

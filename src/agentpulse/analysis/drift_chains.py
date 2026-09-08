@@ -24,28 +24,6 @@ from __future__ import annotations
 _IMPACT_METRICS = {"success", "errors", "retries", "retry_rate", "error_rate"}
 
 
-def _kind(metric: str) -> str:
-    return "impact" if metric in _IMPACT_METRICS else "behaviour"
-
-
-def enrich_drift_signals(drifting: list[dict], series: dict, baseline_runs: int) -> list[dict]:
-    """Add `direction` (up/down/flat) and `kind` (behaviour/impact) to each
-    drifting signal. `drifting` items are {category, entity, metric, drift_start}."""
-    from agentpulse.analysis.metric_series import metric_impact
-    out = []
-    for d in drifting:
-        pts = series.get(d["category"], {}).get(d["entity"], {}).get(d["metric"])
-        if not pts:
-            continue
-        imp = metric_impact(pts, baseline_runs)
-        pct = imp.get("pct")
-        direction = "flat" if not pct else ("up" if pct > 0 else "down")
-        out.append({**d, "direction": direction, "pct": pct,
-                    "kind": _kind(d["metric"]),
-                    "label": f'{d["entity"]} {d["metric"]} {imp["label"]}'})
-    return out
-
-
 def build_topology(edges: list[tuple[str, str]]) -> dict:
     """From handoff edges (from, to), return reachability maps:
        {"down": {a: set(all agents reachable downstream)},

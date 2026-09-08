@@ -18,7 +18,7 @@ from rich.table import Table
 from rich import box
 
 from agentpulse.analysis.layer1_raw import (
-    list_runs, get_run, get_agent_spans, get_tool_calls, get_baseline_runs
+    list_runs, get_agent_spans, get_tool_calls, get_baseline_runs
 )
 from agentpulse.analysis.run_metrics import compute_all
 from agentpulse.analysis.run_anomaly import build_anomaly_report

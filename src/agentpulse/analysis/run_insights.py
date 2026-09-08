@@ -51,11 +51,6 @@ class Insight:
     # so evidence strings can stay short instead of dumping a wall of text.
     details:        Optional[dict] = None
 
-    @property
-    def icon(self) -> str:
-        return _SEVERITY_ICON.get(self.severity, "•")
-
-
 def _rank_key(i: "Insight") -> int:
     """Display order: risks first, then performance bottlenecks, then positives.
 
@@ -304,18 +299,6 @@ def anomaly_insights(m: dict, baseline_list: list[dict]) -> list[Insight]:
 # ═══════════════════════════════════════════════════════════════════════
 # Main entry point
 # ═══════════════════════════════════════════════════════════════════════
-def build_insights(
-    current_metrics: dict,
-    baseline_metrics_list: list[dict] | None = None,
-) -> list[Insight]:
-    """Within-run + single-run anomaly insights (no version drift here)."""
-    insights = single_run_insights(current_metrics)
-    if baseline_metrics_list:
-        insights += anomaly_insights(current_metrics, baseline_metrics_list)
-    insights.sort(key=_rank_key)
-    return insights
-
-
 def severity_counts(insights: list[Insight]) -> dict[str, int]:
     counts = {"critical": 0, "warning": 0, "improvement": 0, "info": 0}
     for i in insights:

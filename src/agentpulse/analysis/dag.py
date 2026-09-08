@@ -64,12 +64,6 @@ class BranchPath:
     def root_agent(self) -> str:
         return self.spans[0]["agent_name"] if self.spans else "?"
 
-    @property
-    def display_name(self) -> str:
-        names = [s["agent_name"] for s in self.spans]
-        return " → ".join(names) if len(names) > 1 else (names[0] if names else "?")
-
-
 @dataclass
 class ParallelGroup:
     parent_step_id:   str
@@ -88,11 +82,6 @@ class ParallelGroup:
         return max(self.branches, key=lambda b: b.duration_ms)
 
     @property
-    def blocked(self) -> list[BranchPath]:
-        bb = self.bottleneck
-        return [b for b in self.branches if b.branch_id != bb.branch_id]
-
-    @property
     def efficiency(self) -> float:
         """sum(branch durations) / (wall_clock * group_size). 1.0 = perfectly balanced."""
         total = sum(b.duration_ms for b in self.branches)
@@ -105,11 +94,6 @@ class ParallelGroup:
 # ---------------------------------------------------------------------------
 def _by_id(spans: list[dict]) -> dict[str, dict]:
     return {s["span_id"]: s for s in spans}
-
-
-def _children_of(spans: list[dict], parent_id: str) -> list[dict]:
-    """Direct children of a parent step (i.e. branch heads)."""
-    return [s for s in spans if s.get("parent_step_id") == parent_id]
 
 
 def _walk_branch(branch_head: dict, all_spans: list[dict],

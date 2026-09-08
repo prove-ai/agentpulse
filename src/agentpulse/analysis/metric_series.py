@@ -262,55 +262,9 @@ def metrics_of(category_series: dict) -> list[str]:
     return seen
 
 
-def build_charts(category_series: dict, metric: str, band_cfg: dict) -> list[dict]:
-    """One chart per entity for the chosen metric: points + band + drift flag."""
-    charts = []
-    for entity, metrics in sorted(category_series.items()):
-        pts = metrics.get(metric)
-        if not pts:
-            continue
-        band = control_band([p["y"] for p in pts], **band_cfg)
-        charts.append({"entity": entity, "metric": metric, "points": pts, "band": band})
-    # Drifting charts first.
-    charts.sort(key=lambda c: (0 if c["band"].get("drifting") else 1, c["entity"]))
-    return charts
-
-
 _TYPE_LABEL = {"handoffs": "Handoff drift", "path": "Path shift",
                "agents": "Agent drift", "parallel": "Parallel imbalance"}
 _IMPACT_METRICS = {"success", "errors", "retries", "cost_usd"}
-
-
-def build_findings(drifting: list[dict], all_series: dict) -> list[dict]:
-    """Group drifting metrics into ranked findings (one per category+entity)."""
-    from collections import defaultdict
-    grouped: dict = defaultdict(list)
-    for d in drifting:
-        grouped[(d["category"], d["entity"])].append(d)
-
-    findings = []
-    for (cat, entity), ds in grouped.items():
-        metrics = [d["metric"] for d in ds]
-        drift_start = min(d["drift_start"] for d in ds)
-        ent_series = all_series.get(cat, {}).get(entity, {})
-        runs_seen = max((len(ent_series.get(m, [])) for m in metrics), default=0)
-        impacty = any(m in _IMPACT_METRICS or "retry" in m for m in metrics)
-        n = len(metrics)
-        if "success" in metrics or n >= 3:
-            risk = "High"
-        elif n == 2 or impacty:
-            risk = "Medium"
-        else:
-            risk = "Watch"
-        findings.append({
-            "category": cat, "entity": entity, "type": _TYPE_LABEL.get(cat, cat),
-            "metrics": metrics, "n_metrics": n, "risk": risk,
-            "runs_seen": runs_seen, "drift_start": drift_start,
-        })
-    # Highest risk first; "Watch" always last. Tie-break by most metrics drifted.
-    order = {"High": 0, "Medium": 1, "Watch": 2}
-    findings.sort(key=lambda f: (order[f["risk"]], -f["n_metrics"]))
-    return findings
 
 
 def _g(x: float) -> str:
@@ -334,14 +288,3 @@ def metric_impact(pts: list[dict], baseline_runs: int) -> dict:
     return {"baseline": round(bm, 3), "recent": round(rm, 3), "pct": pct, "label": label}
 
 
-def drifting_series(all_series: dict, band_cfg: dict) -> list[dict]:
-    """Scan every (category, entity, metric) and list those with an active drift."""
-    out = []
-    for cat, ents in all_series.items():
-        for entity, metrics in ents.items():
-            for metric, pts in metrics.items():
-                band = control_band([p["y"] for p in pts], **band_cfg)
-                if band.get("drifting"):
-                    out.append({"category": cat, "entity": entity, "metric": metric,
-                                "drift_start": band["drift_start"]})
-    return out

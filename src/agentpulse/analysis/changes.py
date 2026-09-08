@@ -168,52 +168,6 @@ def potentially_related_changes(
 # with no DAG fields (sequential systems) fall back to consecutive turn-order
 # edges, which is the linear chain.
 
-def _sequence(spans: list[dict]) -> list[str]:
-    """Agent names in turn order (repeats kept, so re-invocation loops show)."""
-    return [s.get("agent_name") for s in
-            sorted(spans, key=lambda s: s.get("turn_index") or 0)
-            if s.get("agent_name")]
-
-
-def _dag_edges(spans: list[dict]) -> set[tuple[str, str]]:
-    """Directed (from_agent → to_agent) edges describing the run's chain.
-
-    Uses the DAG fields when any span has them: parent_step_id gives parent→child
-    edges (so a fan-out parent yields one edge per branch), and join_step_id gives
-    branch→join edges (the fan-in). Falls back to linear turn-order edges when the
-    run has no DAG information.
-    """
-    by_id = {s.get("span_id"): s for s in spans}
-
-    def name(sid):
-        s = by_id.get(sid)
-        return s.get("agent_name") if s else None
-
-    has_dag = any(s.get("parent_step_id") or s.get("branch_id") or s.get("join_step_id")
-                  for s in spans)
-    edges: set[tuple[str, str]] = set()
-    if has_dag:
-        for s in spans:
-            a, b = name(s.get("parent_step_id")), s.get("agent_name")
-            if a and b and a != b:
-                edges.add((a, b))
-            a, b = s.get("agent_name"), name(s.get("join_step_id"))
-            if a and b and a != b:
-                edges.add((a, b))
-    else:
-        seq = _sequence(spans)
-        for a, b in zip(seq, seq[1:]):
-            if a != b:
-                edges.add((a, b))
-    return edges
-
-
-def path_signature(spans: list[dict]) -> tuple:
-    """Hashable shape of one run's chain: (node set, edge set). Two runs with the
-    same signature have the same chain structure."""
-    return (frozenset(_sequence(spans)), frozenset(_dag_edges(spans)))
-
-
 def _summarize(add_a, rem_a, add_e, rem_e, same_nodes) -> str:
     parts: list[str] = []
     if add_a:
@@ -225,69 +179,6 @@ def _summarize(add_a, rem_a, add_e, rem_e, same_nodes) -> str:
         verb = "Rewired" if same_nodes else "Re-routed"
         parts.append(f"{verb} {n_edges} edge" + ("s" if n_edges != 1 else ""))
     return " · ".join(parts) if parts else "Chain changed"
-
-
-def current_path(runs: list[dict]) -> dict | None:
-    """Shape of the most recent run's chain, for the panel header."""
-    runs = sorted(runs, key=lambda r: r.get("timestamp", ""))
-    for idx in range(len(runs) - 1, -1, -1):
-        spans = get_agent_spans(runs[idx]["run_id"])
-        seq = _sequence(spans)
-        if seq:
-            edges = _dag_edges(spans)
-            has_dag = any(s.get("parent_step_id") or s.get("branch_id") or
-                          s.get("join_step_id") for s in spans)
-            return {
-                "run_index": idx,
-                "chain":     seq,
-                "edges":     sorted([list(e) for e in edges]),
-                "has_dag":   has_dag,
-            }
-    return None
-
-
-def build_path_change_log(runs: list[dict]) -> list[dict]:
-    """`runs` sorted ascending by timestamp. Returns chain-change events — one per
-    consecutive run pair whose DAG signature differs:
-      {run_index, timestamp, old_chain, new_chain, added_agents, removed_agents,
-       added_edges, removed_edges, kind ('structure'|'reorder'), summary}.
-    Runs with no spans are skipped (they don't reset the comparison baseline).
-    """
-    runs = sorted(runs, key=lambda r: r.get("timestamp", ""))
-    events: list[dict] = []
-    prev = None
-    for idx, r in enumerate(runs):
-        spans = get_agent_spans(r["run_id"])
-        seq = _sequence(spans)
-        if not seq:
-            continue
-        nodes, edges = set(seq), _dag_edges(spans)
-        if prev is not None and (prev["nodes"], prev["edges"]) != (nodes, edges):
-            added_agents   = sorted(nodes - prev["nodes"])
-            removed_agents = sorted(prev["nodes"] - nodes)
-            added_edges    = sorted(edges - prev["edges"])
-            removed_edges  = sorted(prev["edges"] - edges)
-            same_nodes = not added_agents and not removed_agents
-            events.append({
-                # Indexed by the EARLIER run of the pair: the change is the diff
-                # from run `run_index` to run `run_index + 1`.
-                "run_index":      prev["idx"],
-                "timestamp":      r.get("timestamp", ""),
-                "old_chain":      prev["seq"],
-                "new_chain":      seq,
-                "old_edges":      sorted([list(e) for e in prev["edges"]]),
-                "new_edges":      sorted([list(e) for e in edges]),
-                "added_agents":   added_agents,
-                "removed_agents": removed_agents,
-                "added_edges":    [list(e) for e in added_edges],
-                "removed_edges":  [list(e) for e in removed_edges],
-                "kind":           "reorder" if same_nodes else "structure",
-                "summary":        _summarize(added_agents, removed_agents,
-                                             added_edges, removed_edges, same_nodes),
-            })
-        prev = {"idx": idx, "seq": seq, "nodes": nodes, "edges": edges}
-    return events
-
 
 
 def route_topology(spans: list[dict]):
@@ -335,19 +226,3 @@ def route_key(run: dict):
     return tuple(json.loads(run.get("agent_sequence") or "[]"))
 
 
-def canonical_route(runs: list[dict]) -> tuple:
-    """The canonical route = the most common route across `runs` (by topology when
-    available, else flat sequence). Returns the representative NODE LIST for the
-    most-common route_key, so the per-run `route_conformance` metric and the route
-    displays agree on what 'canonical' means."""
-    from collections import Counter
-    keyed = [(route_key(r), r) for r in runs]
-    keyed = [(k, r) for k, r in keyed if k]
-    if not keyed:
-        return tuple()
-    top_key, _ = Counter(k for k, _ in keyed).most_common(1)[0]
-    rep = next(r for k, r in keyed if k == top_key)
-    nodes = rep.get("_route_nodes")
-    if nodes:
-        return tuple(nodes)
-    return top_key if isinstance(top_key, tuple) else tuple(json.loads(rep.get("agent_sequence") or "[]"))

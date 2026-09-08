@@ -243,19 +243,6 @@ def _range_note(rng: tuple[float, float] | None, n: int, fmt: str = "{:.1f}") ->
     return f"normal: {fmt.format(rng[0])}–{fmt.format(rng[1])} ({_range_method(n)}, n={n})"
 
 
-def _check_range(name: str, label: str, current: float, base_mean: float,
-                 series: list[float], fmt: str = "{:.1f}") -> MetricVerdict:
-    """Generic range-based anomaly check used by run-level numeric signals."""
-    rng = _normal_range(series)
-    flagged = _outside_range(current, rng)
-    delta = round(_pct(current, base_mean), 1) if base_mean else 0.0
-    return MetricVerdict(
-        name=name, current=round(current, 2), baseline=round(base_mean, 2),
-        delta=delta, drifted=flagged, label=label,
-        note=_range_note(rng, len(series), fmt),
-    )
-
-
 def _check_turns(cur: dict, base: dict, t: dict) -> MetricVerdict:
     """Turns: range-based, but with a 1-turn absolute floor (never flag a ±0.5 jitter)."""
     c = cur.get("total_turns", 0)

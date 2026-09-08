@@ -320,13 +320,6 @@ def _agent_verdicts(b_agents, t_agents, allow_absolute) -> dict:
 # ---------------------------------------------------------------------------
 # Insights from a version-drift report (feed the top card)
 # ---------------------------------------------------------------------------
-def _drift_or_potential(v: VVerdict) -> tuple[str, str]:
-    """Return (status_label, severity_modifier) based on directional consistency."""
-    if v.status == "drift":
-        return ("Drift", "")
-    return ("Potential drift", " ⚠ inconsistent direction — may be noise")
-
-
 def version_insights(r: VersionDriftReport) -> list[Insight]:
     if not r.available:
         return []
