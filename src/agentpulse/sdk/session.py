@@ -447,6 +447,13 @@ class RunSession:
                     candidates = [t for t in self.turns if t.agent_name == c.agent
                                   and t.start_ns <= c.start_ns <= (t.end_ns or now)]
                     target = candidates[-1] if candidates else None
+                    if target is None:
+                        # Same agent but no window hit (out-of-order close):
+                        # its nearest turn still beats any cross-agent guess.
+                        same_agent = [t for t in self.turns if t.agent_name == c.agent]
+                        if same_agent:
+                            target = min(same_agent,
+                                         key=lambda t: abs(t.start_ns - c.start_ns))
                 if target is None:
                     for t in self.turns:
                         if t.start_ns <= c.start_ns <= (t.end_ns or now):

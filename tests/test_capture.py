@@ -267,3 +267,33 @@ def test_cache_aware_cost():
     gpt_base = compute_cost(1000, 100, "gpt-4o")
     gpt_cached = compute_cost(1000, 100, "gpt-4o", cache_read_tokens=800)
     assert gpt_cached < gpt_base
+
+
+def test_parallel_branch_payload_attribution():
+    """Records tagged with their owning agent must land on that agent's span
+    even when parallel branches overlap in time (the witness/evidence case)."""
+    from agentpulse.sdk.session import LLMCallRecord
+
+    session = RunSession(task_text="t")
+    session.per_call_attribution = True
+    ev = session.on_turn_start("evidence")
+    ev.start_ns, ev.end_ns = 1000, 5000
+    session.turns.append(ev)
+    session._current_turn = None
+    wit = session.on_turn_start("witness")
+    wit.start_ns, wit.end_ns = 1100, 5100   # overlapping window
+    session.turns.append(wit)
+    session._current_turn = None
+
+    session._pending_api_calls = [
+        LLMCallRecord(start_ns=1200, end_ns=4000, input_tokens=1, output_tokens=1,
+                      model="m", agent="evidence"),
+        LLMCallRecord(start_ns=1300, end_ns=4100, input_tokens=1, output_tokens=1,
+                      model="m", agent="witness"),
+        # Tagged but outside the window: nearest same-agent turn still wins.
+        LLMCallRecord(start_ns=9000, end_ns=9100, input_tokens=1, output_tokens=1,
+                      model="m", agent="witness"),
+    ]
+    session.finalise()
+    by_agent = {t.agent_name: len(t.llm_calls) for t in session.turns}
+    assert by_agent == {"evidence": 1, "witness": 2}

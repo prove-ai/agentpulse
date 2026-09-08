@@ -36,6 +36,7 @@ from uuid import UUID
 from agentpulse.sdk.session import (
     RunSession, get_config, get_active_session,
     set_active_session, clear_active_session, parse_status_value, safe_json,
+    set_active_agent,
 )
 from agentpulse.storage.sqlite_store import write_session
 
@@ -449,19 +450,28 @@ class _ObservabilityCallback:
                 # and stamp the start time for accurate per-call latency.
                 self._parent_of_run[run_id] = parent_run_id
                 self._llm_starts[run_id] = time.time_ns()
+                agent = self._span_to_agent.get(self._nearest_tracked_ancestor(parent_run_id))
+                # Tag the context so the SDK patches stamp this call's record with
+                # its owning agent. This runs in the same thread/task as the API
+                # call itself, so parallel branches each tag their own calls —
+                # without it, finalise() falls back to time-window matching,
+                # which misfiles records when branches overlap.
+                if agent:
+                    set_active_agent(agent)
                 # Capture this agent's config (model/params/tools/prompt hash) for
                 # change tracking & versioning.
                 session = get_active_session()
-                if session is not None:
-                    agent = self._span_to_agent.get(self._nearest_tracked_ancestor(parent_run_id))
-                    if agent:
-                        cfg = _extract_config(serialized, messages, kwargs)
-                        if cfg:
-                            session.record_agent_config(agent, cfg)
+                if session is not None and agent:
+                    cfg = _extract_config(serialized, messages, kwargs)
+                    if cfg:
+                        session.record_agent_config(agent, cfg)
 
             def on_llm_start(self, serialized, prompts, *, run_id, parent_run_id=None, **kwargs):
                 self._parent_of_run[run_id] = parent_run_id
                 self._llm_starts[run_id] = time.time_ns()
+                agent = self._span_to_agent.get(self._nearest_tracked_ancestor(parent_run_id))
+                if agent:
+                    set_active_agent(agent)
 
             def on_llm_end(self, response, *, run_id, parent_run_id=None, **kwargs):
                 session = get_active_session()
