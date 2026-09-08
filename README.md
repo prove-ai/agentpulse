@@ -87,12 +87,6 @@ agentpulse run python main.py
 
 If your system runs on a supported framework (see the table below), that is the whole integration. Every LLM call, agent turn, tool call, and handoff is captured into `~/.agentpulse/db/runs.db`. Your data stays on your machine, as plain SQLite files in your home directory.
 
-To monitor several systems side by side, give each its own database:
-
-```bash
-AGENTPULSE_DB=my-system agentpulse run python main.py
-```
-
 ### Step 3: open the dashboard
 
 ```bash
@@ -100,6 +94,16 @@ agentpulse dashboard
 ```
 
 Open <http://localhost:5001>. Your project appears in the sidebar picker.
+
+### Optional: monitor several systems side by side
+
+Give each system its own database:
+
+```bash
+AGENTPULSE_DB=my-system agentpulse run python main.py
+```
+
+Each database shows up as its own project in the dashboard's sidebar picker.
 
 ### Optional: explore the bundled sample project
 
