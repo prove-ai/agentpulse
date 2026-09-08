@@ -25,7 +25,7 @@ One drift engine, three surfaces. The dashboard, the CLI, and the MCP server cal
 
 ```mermaid
 flowchart LR
-    A["your multi-agent app<br/>+ instrument()"] --> B["sdk/<br/>intercepts LLM calls,<br/>tool calls, handoffs"]
+    A["your multi-agent app<br/>via agentpulse run"] --> B["sdk/<br/>intercepts LLM calls,<br/>tool calls, handoffs"]
     B --> C[("storage/<br/>SQLite, one file<br/>per project")]
     C --> D["analysis/<br/>metrics, anomalies,<br/>drift, causal chains"]
     D --> E["Dashboard (Flask)"]
@@ -100,13 +100,6 @@ To monitor several systems side by side, give each its own database:
 
 ```bash
 AGENTPULSE_DB=my-system agentpulse run python main.py
-```
-
-If you can't change how your app is launched (a notebook, a process manager), add two lines at the top of your entry point instead — this is exactly what `agentpulse run` does for you:
-
-```python
-import agentpulse
-agentpulse.instrument()
 ```
 
 ### Framework support
