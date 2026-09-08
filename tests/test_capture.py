@@ -98,6 +98,90 @@ def test_async_stream_capture():
         clear_active_session()
 
 
+class APIResponse:  # the name matters: the patch detects wrappers by type name
+    """Fake with_raw_response wrapper: parse() returns the rich object."""
+    def __init__(self, parsed):
+        self._parsed = parsed
+
+    def parse(self, *a, **k):
+        return self._parsed
+
+
+def _make_patched_pair():
+    from agentpulse.sdk.patches.anthropic import _patch_pair
+
+    class Messages:
+        def create(self, **kwargs):
+            return kwargs["_resp"]
+
+    class AsyncMessages:
+        async def create(self, **kwargs):
+            return kwargs["_resp"]
+
+    _patch_pair(Messages, AsyncMessages)
+    return Messages(), AsyncMessages()
+
+
+def _fake_message():
+    return NS(
+        content=[{"type": "text", "text": "parsed!"}], stop_reason="end_turn",
+        model="claude-opus-5", usage=NS(input_tokens=11, output_tokens=7),
+        model_dump=lambda: {"content": [{"type": "text", "text": "parsed!"}],
+                            "stop_reason": "end_turn", "model": "claude-opus-5",
+                            "usage": {"input_tokens": 11, "output_tokens": 7}})
+
+
+def test_raw_response_unwrap_nonstream():
+    """LangChain calls messages.with_raw_response.create: the record must come
+    from the parsed Message while the caller still gets the raw wrapper."""
+    msgs, _ = _make_patched_pair()
+    session = _session()
+    try:
+        raw = APIResponse(_fake_message())
+        result = msgs.create(model="m", _resp=raw)
+        assert result is raw, "caller must still receive the raw wrapper"
+        assert len(session._pending_api_calls) == 1
+        rec = session._pending_api_calls[0]
+        assert (rec.input_tokens, rec.output_tokens, rec.model) == (11, 7, "claude-opus-5")
+        assert json.loads(rec.response_json)["content"][0]["text"] == "parsed!"
+    finally:
+        clear_active_session()
+
+
+def test_raw_response_stream():
+    """with_raw_response + stream=True: parse() must hand the caller a recording
+    wrapper, and consuming it must produce the record."""
+    msgs, _ = _make_patched_pair()
+    session = _session()
+    try:
+        raw = APIResponse(iter(_fake_events()))
+        result = msgs.create(model="m", stream=True, _resp=raw)
+        assert result is raw
+        stream = result.parse()
+        events = list(stream)
+        assert len(events) == 11
+        assert len(session._pending_api_calls) == 1
+        rec = session._pending_api_calls[0]
+        assert (rec.input_tokens, rec.output_tokens) == (120, 57)
+        assert json.loads(rec.response_json)["content"][0]["text"] == "Hello world."
+    finally:
+        clear_active_session()
+
+
+def test_plain_message_still_recorded():
+    """Direct SDK usage (no raw wrapper, no stream) keeps working."""
+    msgs, _ = _make_patched_pair()
+    session = _session()
+    try:
+        message = _fake_message()
+        result = msgs.create(model="m", _resp=message)
+        assert result is message
+        assert len(session._pending_api_calls) == 1
+        assert session._pending_api_calls[0].input_tokens == 11
+    finally:
+        clear_active_session()
+
+
 def test_text_from_outputs_shapes():
     # LangGraph append-reducer shape: last message wins.
     msg = NS(content="The butler did it.")

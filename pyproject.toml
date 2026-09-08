@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "proveai-agentpulse"
-version = "0.3.2"
+version = "0.3.3"
 description = "Observability and drift detection for multi-agent systems (AutoGen, LangChain/LangGraph)"
 readme = "PYPI.md"
 license = { file = "LICENSE" }

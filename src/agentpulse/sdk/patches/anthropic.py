@@ -246,6 +246,85 @@ class _AsyncRecordingStream:
         return getattr(self._inner, name)
 
 
+def _record(response, start_ns, end_ns, request_json):
+    session = get_active_session()
+    if session is not None:
+        usage = getattr(response, "usage", None)
+        inp   = int(getattr(usage, "input_tokens",  0) or 0) if usage else 0
+        out   = int(getattr(usage, "output_tokens", 0) or 0) if usage else 0
+        model = str(getattr(response, "model", "") or "")
+        session._pending_api_calls.append(LLMCallRecord(
+            start_ns=start_ns, end_ns=end_ns,
+            input_tokens=inp, output_tokens=out, model=model,
+            request_json=request_json,
+            response_json=_response_payload(response),
+            agent=get_active_agent(),
+        ))
+
+
+def _is_raw(response) -> bool:
+    # client.messages.with_raw_response.create (how LangChain calls the SDK)
+    # returns an APIResponse wrapper, not the parsed Message/Stream.
+    return type(response).__name__ in ("APIResponse", "LegacyAPIResponse",
+                                       "AsyncAPIResponse", "AsyncLegacyAPIResponse")
+
+
+def _patch_pair(messages_cls, async_messages_cls):
+    original_sync_create = messages_cls.create
+
+    def _patched_sync_create(self, *args, **kwargs):
+        start_ns = time.time_ns()
+        request_json = _request_payload(kwargs)
+        response = original_sync_create(self, *args, **kwargs)
+        parsed = response
+        if _is_raw(response):
+            # parse() caches, so the caller's own parse() gets the same object.
+            try:
+                parsed = response.parse()
+            except Exception:
+                parsed = response
+        if kwargs.get("stream"):
+            # Stream of events, not a Message — record when it's consumed.
+            wrapper = _RecordingStream(parsed, start_ns, request_json)
+            if _is_raw(response):
+                try:
+                    response.parse = lambda *a, **k: wrapper
+                    return response
+                except Exception:
+                    return response  # can't intercept; skip recording this call
+            return wrapper
+        _record(parsed, start_ns, time.time_ns(), request_json)
+        return response
+
+    original_async_create = async_messages_cls.create
+
+    async def _patched_async_create(self, *args, **kwargs):
+        start_ns = time.time_ns()
+        request_json = _request_payload(kwargs)
+        response = await original_async_create(self, *args, **kwargs)
+        parsed = response
+        if _is_raw(response):
+            try:
+                parsed = await response.parse()
+            except Exception:
+                parsed = response
+        if kwargs.get("stream"):
+            wrapper = _AsyncRecordingStream(parsed, start_ns, request_json)
+            if _is_raw(response):
+                try:
+                    async def _parse_override(*a, **k):
+                        return wrapper
+                    response.parse = _parse_override
+                    return response
+                except Exception:
+                    return response
+            return wrapper
+        _record(parsed, start_ns, time.time_ns(), request_json)
+        return response
+
+    messages_cls.create       = _patched_sync_create
+    async_messages_cls.create = _patched_async_create
+
 def patch_anthropic() -> None:
     global _PATCHED
     if _PATCHED:
@@ -257,44 +336,14 @@ def patch_anthropic() -> None:
         # Anthropic not installed — skip
         return
 
-    def _record(response, start_ns, end_ns, request_json):
-        session = get_active_session()
-        if session is not None:
-            usage = getattr(response, "usage", None)
-            inp   = int(getattr(usage, "input_tokens",  0) or 0) if usage else 0
-            out   = int(getattr(usage, "output_tokens", 0) or 0) if usage else 0
-            model = str(getattr(response, "model", "") or "")
-            session._pending_api_calls.append(LLMCallRecord(
-                start_ns=start_ns, end_ns=end_ns,
-                input_tokens=inp, output_tokens=out, model=model,
-                request_json=request_json,
-                response_json=_response_payload(response),
-                agent=get_active_agent(),
-            ))
-
-    original_sync_create = Messages.create
-
-    def _patched_sync_create(self, *args, **kwargs):
-        start_ns = time.time_ns()
-        request_json = _request_payload(kwargs)
-        response = original_sync_create(self, *args, **kwargs)
-        if kwargs.get("stream"):
-            # Stream of events, not a Message — record when it's consumed.
-            return _RecordingStream(response, start_ns, request_json)
-        _record(response, start_ns, time.time_ns(), request_json)
-        return response
-
-    original_async_create = AsyncMessages.create
-
-    async def _patched_async_create(self, *args, **kwargs):
-        start_ns = time.time_ns()
-        request_json = _request_payload(kwargs)
-        response = await original_async_create(self, *args, **kwargs)
-        if kwargs.get("stream"):
-            return _AsyncRecordingStream(response, start_ns, request_json)
-        _record(response, start_ns, time.time_ns(), request_json)
-        return response
-
-    Messages.create      = _patched_sync_create
-    AsyncMessages.create = _patched_async_create
+    _patch_pair(Messages, AsyncMessages)
+    # LangChain routes through client.beta.messages.create when beta features
+    # are in play — patch that surface too when it exists.
+    try:
+        from anthropic.resources.beta.messages.messages import (
+            Messages as BetaMessages, AsyncMessages as AsyncBetaMessages,
+        )
+        _patch_pair(BetaMessages, AsyncBetaMessages)
+    except ImportError:
+        pass
     _PATCHED = True
